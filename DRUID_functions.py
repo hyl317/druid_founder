@@ -706,14 +706,22 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
 def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
     # using total length of IBD (in cM) and expected percentage of parent genome present in sibling set or percentage of grandparent genome present in sib + aunt/uncle set, calculate estimated K
     print(f'uncorrected total IBD length= {total_IBD}')
-    total_IBD = max(0, total_IBD - 62.12)
+    #if pct_par != 0 and pct_par_rel != 0:
+    #    K = total_IBD / total_genome / 4 * 1 / pct_par * 1 / pct_par_rel
+    #elif pct_par == 0:
+    #    K = total_IBD / total_genome / 4 * 1 / pct_par_rel
+    #elif pct_par_rel == 0:
+    #    K = total_IBD / total_genome / 4 * 1 / pct_par
+    #return K  # input getSiblingRelativeIBDLength
+    IBD_prop_from_background = 62.12 / total_genome
     if pct_par != 0 and pct_par_rel != 0:
-        K = total_IBD / total_genome / 4 * 1 / pct_par * 1 / pct_par_rel
+        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
     elif pct_par == 0:
-        K = total_IBD / total_genome / 4 * 1 / pct_par_rel
+        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par_rel
     elif pct_par_rel == 0:
-        K = total_IBD / total_genome / 4 * 1 / pct_par
-    return K  # input getSiblingRelativeIBDLength
+        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par
+    return (K - IBD_prop_from_background) / 4
+
 
 
 
