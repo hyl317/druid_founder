@@ -715,7 +715,7 @@ def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
         K = total_IBD / total_genome / 4 * 1 / pct_par
     #return K  # input getSiblingRelativeIBDLength
 
-    IBD_prop_from_background = 62.12 / total_genome
+    IBD_prop_from_background = 80 / total_genome
     if pct_par != 0 and pct_par_rel != 0:
         obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
     elif pct_par == 0:
