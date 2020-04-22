@@ -4,6 +4,7 @@ import copy
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
+BACKGROUND = 62.12
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
@@ -715,7 +716,7 @@ def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
         K = total_IBD / total_genome / 4 * 1 / pct_par
     #return K  # input getSiblingRelativeIBDLength
 
-    IBD_prop_from_background = 62.12 / total_genome
+    IBD_prop_from_background = BACKGROUND / total_genome
     if pct_par != 0 and pct_par_rel != 0:
         obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
     elif pct_par == 0:
@@ -752,8 +753,10 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     # Caller ensures this intersection is empty:
     assert avunc1.intersection(avunc2) == set()
 
-    # returns total length of genome IBD between sibandav and sibandav_rel, number of sibs in sib1 with IBD segments, number of sibs in sib2 with IBD segments
-    [tmpsibav, sib1_len, sib2_len, av1_len, av2_len] = getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs)
+    # returns total length of genome IBD between sibandav and sibandav_rel, number of sibs in sib1 with IBD segments, 
+    # number of sibs in sib2 with IBD segments
+    [tmpsibav, sib1_len, sib2_len, av1_len, av2_len] = \
+        getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs)
 
     #get proportion of ancestor genome information expected on side 1
     if av1_len != 0:
@@ -1021,6 +1024,7 @@ def getAllRel(results_file, inds_file):
         if l[0] in inds and l[1] in inds:
             ibd1 = float(l[2])
             ibd2 = float(l[3])
+            ibd1 = max(0, ibd1 - BACKGROUND) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
             K = ibd1/4.0 + ibd2/2.0
             degree = getInferredFromK(K)
             if l[0] < l[1]:
