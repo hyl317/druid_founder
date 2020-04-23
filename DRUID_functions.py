@@ -714,20 +714,20 @@ def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
         K = total_IBD / total_genome / 4 * 1 / pct_par_rel
     elif pct_par_rel == 0:
         K = total_IBD / total_genome / 4 * 1 / pct_par
-    #return K  # input getSiblingRelativeIBDLength
+    return K  # input getSiblingRelativeIBDLength
 
-    IBD_prop_from_background = BACKGROUND / total_genome
-    if pct_par != 0 and pct_par_rel != 0:
-        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
-    elif pct_par == 0:
-        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par_rel
-    elif pct_par_rel == 0:
-        obs_IBD_prop = total_IBD / total_genome * 1 / pct_par
+    #IBD_prop_from_background = BACKGROUND / total_genome
+    #if pct_par != 0 and pct_par_rel != 0:
+    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
+    #elif pct_par == 0:
+    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par_rel
+    #elif pct_par_rel == 0:
+    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par
 
     
-    corrected_IBD_prop = max(0, obs_IBD_prop - IBD_prop_from_background)
-    print(f'uncorrected K={round(K, 4)}, corrected K={round(corrected_IBD_prop/4, 4)}')
-    return corrected_IBD_prop / 4
+    #corrected_IBD_prop = max(0, obs_IBD_prop - IBD_prop_from_background)
+    #print(f'uncorrected K={round(K, 4)}, corrected K={round(corrected_IBD_prop/4, 4)}')
+    #return corrected_IBD_prop / 4
 
 
 
@@ -1024,7 +1024,7 @@ def getAllRel(results_file, inds_file):
         if l[0] in inds and l[1] in inds:
             ibd1 = float(l[2])
             ibd2 = float(l[3])
-            ibd1 = max(0, ibd1 - BACKGROUND / total_genome) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
+            #ibd1 = max(0, ibd1 - BACKGROUND / total_genome) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
             K = ibd1/4.0 + ibd2/2.0
             degree = getInferredFromK(K)
             if l[0] < l[1]:
