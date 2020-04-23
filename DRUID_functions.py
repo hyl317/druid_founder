@@ -761,10 +761,12 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     #MY MODIFICATION STARTS HERE
     num_R1 = sib1_len + av1_len
     num_R2 = sib2_len + av2_len
-    print(f'{sib1}, {avunc1}')
-    print(f'{sib2},{avunc2}')
-    print(f'num_R1: {num_R1}; num_R2: {num_R2}; original total IBD: {tmpsibav}')
+   
     tmpsibav -= num_R1 * num_R2 * BACKGROUND
+    if tmpsibav > 0:
+        print(f'{sib1}, {avunc1}')
+        print(f'{sib2},{avunc2}')
+        print(f'num_R1: {num_R1}; num_R2: {num_R2}; original total IBD: {tmpsibav + num_R1 * num_R2 * BACKGROUND}')
     tmpsibav = max(0, tmpsibav)
     #MY MODIFICATION ENDS HERE
 
