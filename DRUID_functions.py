@@ -5,6 +5,7 @@ from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
 BACKGROUND = 62.12
+#BACKGROUND = 0
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
@@ -767,7 +768,7 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
         print(f'{sib1}, {avunc1}')
         print(f'{sib2},{avunc2}')
 
-    print(f'num_R1:\t{num_R1}\tnum_R2\t{num_R2}\toriginal_total_IBD\t{tmpsibav + num_R1 * num_R2 * BACKGROUND}')
+    print(f'num_R1\t{num_R1}\tnum_R2\t{num_R2}\toriginal_total_IBD\t{tmpsibav + num_R1 * num_R2 * BACKGROUND}')
     tmpsibav = max(0, tmpsibav)
     #MY MODIFICATION ENDS HERE
 
