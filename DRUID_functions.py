@@ -1032,7 +1032,11 @@ def getAllRel(results_file, inds_file):
         if l[0] in inds and l[1] in inds:
             ibd1 = float(l[2])
             ibd2 = float(l[3])
-            #ibd1 = max(0, ibd1 - BACKGROUND / total_genome) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
+
+            #MY MODIFICATION STARTS HERE
+            ibd1 = max(0, ibd1 - BACKGROUND / total_genome) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
+            #MY MODIFICATION ENDS HERE
+            
             K = ibd1/4.0 + ibd2/2.0
             degree = getInferredFromK(K)
             if l[0] < l[1]:
