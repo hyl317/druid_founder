@@ -706,7 +706,7 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
 
 def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
     # using total length of IBD (in cM) and expected percentage of parent genome present in sibling set or percentage of grandparent genome present in sib + aunt/uncle set, calculate estimated K
-    print(f'uncorrected total IBD length= {round(total_IBD,4)}')
+    print(f'corrected total IBD length= {round(total_IBD,4)}')
 
     if pct_par != 0 and pct_par_rel != 0:
         K = total_IBD / total_genome / 4 * 1 / pct_par * 1 / pct_par_rel
@@ -757,6 +757,14 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     # number of sibs in sib2 with IBD segments
     [tmpsibav, sib1_len, sib2_len, av1_len, av2_len] = \
         getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs)
+
+    #MY MODIFICATION STARTS HERE
+    num_R1 = sib1_len + av1_len
+    num_R2 = sib2_len + av2_len
+    tmpsibav -= num_R1 * num_R2 * BACKGROUND
+    tmpsibav = max(0, tmpsibav)
+    #MY MODIFICATION ENDS HERE
+
 
     #get proportion of ancestor genome information expected on side 1
     if av1_len != 0:
