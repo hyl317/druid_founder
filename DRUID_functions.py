@@ -789,9 +789,9 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     else:
         adj = 4*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
         *(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
-            + 2*M*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
-            + 2*M*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
-            + M*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
+            + 2*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
+            + 2*BACKGROUND*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
+            + BACKGROUND*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
 
    
     tmpsibav = max(0, tmpsibav-adj)
