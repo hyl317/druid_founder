@@ -800,7 +800,7 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     #    print(f'{sib1}, {avunc1}')
     #    print(f'{sib2},{avunc2}')
 
-    print(f'num_R1\t{sib1_len+sib2_len}\tnum_R2\t{av1_len+av2_len}')
+    print(f'num_R1\t{sib1_len+av1_len}\tnum_R2\t{sib2_len+av2_len}')
     print(f'total IBD before correction: {tmp}')
     print(f'total IBD after correction: {tmpsibav}')
     #MY MODIFICATION ENDS HERE
