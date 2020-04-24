@@ -696,17 +696,17 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
 
     #MY MODIFICATION STARTS HERE
     #Print out sum of IBD length before overlapping intervals are merged
-    #wanna see whether total IBD sharing amount is proportional to number of pairs
-    temp_ibd_sum = 0
-    num_R1 = len(sib1) + len(avunc1)
-    num_R2 = len(sib2) + len(avunc2)
+    ##wanna see whether total IBD sharing amount is proportional to number of pairs
+    #temp_ibd_sum = 0
+    #num_R1 = len(sib1) + len(avunc1)
+    #num_R2 = len(sib2) + len(avunc2)
 
-    for chr in range(num_chrs):
-        for seg in all_seg_IBD1[chr]:
-            temp_ibd_sum += seg[1] - seg[0]
-        for seg in all_seg_IBD2[chr]:
-            temp_ibd_sum += 2*(seg[1] - seg[0])
-    print(f'total IBD length {temp_ibd_sum} for {num_R1*num_R2} pairwise comparison')
+    #for chr in range(num_chrs):
+    #    for seg in all_seg_IBD1[chr]:
+    #        temp_ibd_sum += seg[1] - seg[0]
+    #    for seg in all_seg_IBD2[chr]:
+    #        temp_ibd_sum += 2*(seg[1] - seg[0])
+    #print(f'total IBD length {temp_ibd_sum} for {num_R1*num_R2} pairwise comparison')
 
     #MY MODIFICATION ENDS HERE
 
@@ -778,16 +778,31 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
         getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs)
 
     #MY MODIFICATION STARTS HERE
-    num_R1 = sib1_len + av1_len
-    num_R2 = sib2_len + av2_len
-   
-    tmpsibav -= num_R1 * num_R2 * BACKGROUND
-    if tmpsibav > 0:
-        print(f'{sib1}, {avunc1}')
-        print(f'{sib2},{avunc2}')
+    tmp = tmpsibav
 
-    print(f'num_R1\t{num_R1}\tnum_R2\t{num_R2}\toriginal_total_IBD\t{tmpsibav + num_R1 * num_R2 * BACKGROUND}')
-    tmpsibav = max(0, tmpsibav)
+    if sib2_len + av2_len == 1:
+        adj = 2*BACKGROUND*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
+            +BACKGROUND*(1-0.5**sib1_len)
+    elif sib1_len + av1_len == 1:
+        adj = 2*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
+            +BACKGROUND*(1-0.5**sib2_len)
+    else:
+        adj = 4*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
+        *(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
+            + 2*M*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
+            + 2*M*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
+            + M*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
+
+   
+    tmpsibav = max(0, tmpsibav-adj)
+
+    #if tmpsibav > 0:
+    #    print(f'{sib1}, {avunc1}')
+    #    print(f'{sib2},{avunc2}')
+
+    print(f'num_R1\t{num_R1}\tnum_R2\t{num_R2}')
+    print(f'total IBD before correction: {tmp}')
+    print(f'total IBD after correction: {tmpsibav}')
     #MY MODIFICATION ENDS HERE
 
 
