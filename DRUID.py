@@ -26,7 +26,8 @@ parser.add_argument('-f', type=str, nargs=1, default=[''], help="Known first (FS
 parser.add_argument('-u', type=str, nargs=1, default=[''], help='File containing individuals to include', metavar='file.inds')
 parser.add_argument('-C', type=int, nargs=1, default=[0], help='Whether to run DRUID in normal mode (0) or conservative mode (1); default is 0', metavar='0/1')
 parser.add_argument('-F', type=int, nargs=1, default=[0], help='Whether to output fam files (PLINK format) containing inferred/provided relationship types; default is 0', metavar='0/1')
-
+parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 200 generations.", metavar="Ne trajectory")
+parser.add_argument('-C', type=float, dest='C', default=2, help="minimum length(in centiMorgan) of IBD detected")
 args=parser.parse_args()
 
 inds = []
@@ -54,6 +55,18 @@ print("Genome length: " + str(total_genome)+'\n')
 # Get IBD1/2 info
 [all_rel,inds,first,second,third] = getAllRel(args.i[0],args.u[0])
 print("Total number of individuals: " + str(len(inds)))
+
+global founder, mean_seg_num, mean_ibd_len, C
+founder = args.N != None
+if founder:
+    C = args.C
+    N = readNe(args.N)
+    mean_seg_num = 4*expectation_num_segment(N, args.C)
+    mean_ibd_len = expectedibdsharing(N, chr_len_cm)
+
+print(f'founder: {founder}')
+print(f'mean_seg_num: {mean_seg_num}')
+print(f'mean_ibd_len: {mean_ibd_len}')
 
 #make graph
 rel_graph = nx.DiGraph()
