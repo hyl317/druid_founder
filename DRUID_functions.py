@@ -1,6 +1,7 @@
 import itertools
 import networkx as nx
 import copy
+import gzip
 import numpy as np
 from scipy.integrate import quad
 from scipy.special import logsumexp
@@ -144,6 +145,28 @@ def inferFirst(rel_graph, rel_graph_tmp, all_rel, first, second, C):
     #             if not rel_graph.has_edge(ind,n):
     #                 addEdgeType
 
+#MY MODIFICATION STARTS
+def readHapIBD(file_for_hapibd):
+    hapibd_segs = {}
+
+    with gzip.open(file_for_hapibd, 'rt') as file:
+        line = file.readline()
+        while line:
+            ind1, _, ind2, _, chr, _, _, len = line.strip().split('\t')
+            ids = (min(ind1, ind2), max(ind1, ind2))
+            if not ids[0] in all_segs:
+                hapibd_segs[ ids[0] ] = \
+                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
+            elif not ids[1] in all_segs[ ids[0] ]:
+                hapibd_segs[ ids[0] ][ ids[1] ] = \
+                                { chr : [] for chr in range(num_chrs) }
+
+            hapibd_segs[ids[0]][ids[1]][int(chr)].append(float(len))
+            line = file.readline()
+    return hapibd_segs
+
+
+#MY MODIFICATION ENDS
 
 def readSegments(file_for_segments):
     all_segs = {}
@@ -1060,7 +1083,7 @@ def alter_likelihood(ibd_list, C):
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
-def getAllRel(results_file, inds_file, all_segs, C):
+def getAllRel(results_file, inds_file, hapibd_segs, C):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
     # store pairwise relatedness information
@@ -1111,34 +1134,37 @@ def getAllRel(results_file, inds_file, all_segs, C):
             elif degree == 3:
                 third.append([ind1, ind2])
             else:
-                tmp = getIBDsegments(ind1, ind2, all_segs)
-                #tmp1, tmp2 store ibd1, ibd2 segments, respectively
-                tmp1, tmp2 = tmp[0], tmp[1]
-                #compile a list of ibds between ibd1 and ibd2
-                #for an ERSA like approach, we simply need a list of ibd length, nothing else
-                ibd_list = []
-                for chr in range(num_chrs):
-                    for start, end in tmp1[chr]:
-                        ibd_list.append(end - start)
-                    for start, end in tmp2[chr]:
-                        #should be rare to have ibd2 in degree 4 or more distant relatives
-                        #we just treat ibd2 as 2 separate ibd1 here
-                        ibd_list.append(end - start)
-                        ibd_list.append(end - start)
+                #tmp = getIBDsegments(ind1, ind2, all_segs)
+                ##tmp1, tmp2 store ibd1, ibd2 segments, respectively
+                #tmp1, tmp2 = tmp[0], tmp[1]
+                ##compile a list of ibds between ibd1 and ibd2
+                ##for an ERSA like approach, we simply need a list of ibd length, nothing else
+                #ibd_list = []
+                #for chr in range(num_chrs):
+                #    for start, end in tmp1[chr]:
+                #        ibd_list.append(end - start)
+                #    for start, end in tmp2[chr]:
+                #        #should be rare to have ibd2 in degree 4 or more distant relatives
+                #        #we just treat ibd2 as 2 separate ibd1 here
+                #        ibd_list.append(end - start)
+                #        ibd_list.append(end - start)
 
-                ibd_list.sort()
-                ibd_list = np.array(ibd_list)
-                null_lik = null_likelihood(ibd_list, C)
-                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
-                alter_lik = max(alter_lik, null_lik)
-                chi2 = -2*(null_lik - alter_lik)
-                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                print(f'degree estimated from K: {degree}', flush=True)
-                if p_value < 0.01:
-                    degree = d
-                else:
+                if ind1 not in hapibd_segs or ind2 not in hapibd_segs[ind1]:
                     degree = -1
-                print(f'degree estimated from ERSA-like approach: {degree}', flush=True)
+                else:
+                    ibd_list.sort()
+                    ibd_list = np.array(ibd_list)
+                    null_lik = null_likelihood(ibd_list, C)
+                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+                    alter_lik = max(alter_lik, null_lik)
+                    chi2 = -2*(null_lik - alter_lik)
+                    p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                    print(f'degree estimated from K: {degree}', flush=True)
+                    if p_value < 0.01:
+                        degree = d
+                    else:
+                        degree = -1
+                    print(f'degree estimated from ERSA-like approach: {degree}', flush=True)
 
             all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 
