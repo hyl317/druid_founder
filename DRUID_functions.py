@@ -1149,9 +1149,11 @@ def getAllRel(results_file, inds_file, hapibd_segs, C):
                 #        ibd_list.append(end - start)
                 #        ibd_list.append(end - start)
 
-                if ind1 not in hapibd_segs or ind2 not in hapibd_segs[ind1]:
-                    degree = -1
-                else:
+                if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+                    ibd_list = []
+                    for chr in range(num_chrs):
+                        ibd_list.extend(hapibd_segs[ind1][ind2][chr])
+
                     ibd_list.sort()
                     ibd_list = np.array(ibd_list)
                     null_lik = null_likelihood(ibd_list, C)
@@ -1159,6 +1161,8 @@ def getAllRel(results_file, inds_file, hapibd_segs, C):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                    print(f'number of ibd segments: {len(ibd_list)}')
+                    print(ibd_list)
                     print(f'degree estimated from K: {degree}', flush=True)
                     if p_value < 0.01:
                         degree = d
