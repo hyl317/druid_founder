@@ -1,12 +1,15 @@
 import itertools
 import networkx as nx
 import copy
+import numpy as np
+from scipy.integrate import quad
+from scipy.special import logsumexp
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
 #BACKGROUND = 62.12
 #BACKGROUND = 1.95
-global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, C, mean_seg_num, mean_ibd_len
+global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_len
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
@@ -1628,7 +1631,7 @@ def expectation_num_segment(N, u):
 
     return total_genome*(np.exp(log_term1)+np.exp(log_term2))
 
-def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, n_p):
+def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, C, n_p):
     def partb(g, n_g, maxgen, C, chromlen):
         part3 = np.sum((C*g/50 + 1)*chromlen) - len(chromlen)*(C**2)*g/50
         part2 = -C*g/50
@@ -1639,11 +1642,11 @@ def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, n_p):
     integral2, err2 = quad(partb, maxgen, np.inf, args=(n_past, maxgen, C, chr_len_cm))
     return np.log(n_p) - np.log(2*n_past) + np.sum(np.log(1-1/(2*n))) + np.log((integral1 + integral2)/2)
 
-def expectedibdsharing(n, chr_len_cm):
+def expectedibdsharing(n, chr_len_cm, C):
     g = len(n)
     gen = np.arange(1, g+1)
     log_term3 = np.log(np.sum(C*(chr_len_cm[:,np.newaxis]@gen.reshape((1, g)))/50 + chr_len_cm[:,np.newaxis] - ((C**2)*gen)/50, axis=0))
     sum_log_prob_not_coalesce = np.cumsum(np.insert(np.log(1-1/(2*n)), 0, 0))[:-1]
     log_expectation = np.log(4) + sum_log_prob_not_coalesce - np.log(2*n) - C*gen/50 + log_term3
-    log_expectation = np.append(log_expectation, log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, g, 4)) #need to calculate expected amount of ibd coalescing beyond maxgen generations into the past
+    log_expectation = np.append(log_expectation, log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, g, C, 4)) #need to calculate expected amount of ibd coalescing beyond maxgen generations into the past
     return np.sum(np.exp(log_expectation))
