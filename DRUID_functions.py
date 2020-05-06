@@ -7,9 +7,7 @@ from scipy.special import logsumexp
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
-#BACKGROUND = 62.12
-#BACKGROUND = 1.95
-global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_len
+global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
@@ -738,21 +736,6 @@ def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
         K = total_IBD / total_genome / 4 * 1 / pct_par
     return K  # input getSiblingRelativeIBDLength
 
-    #IBD_prop_from_background = BACKGROUND / total_genome
-    #if pct_par != 0 and pct_par_rel != 0:
-    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par * 1 / pct_par_rel
-    #elif pct_par == 0:
-    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par_rel
-    #elif pct_par_rel == 0:
-    #    obs_IBD_prop = total_IBD / total_genome * 1 / pct_par
-
-    
-    #corrected_IBD_prop = max(0, obs_IBD_prop - IBD_prop_from_background)
-    #print(f'uncorrected K={round(K, 4)}, corrected K={round(corrected_IBD_prop/4, 4)}')
-    #return corrected_IBD_prop / 4
-
-
-
 
 def getExpectedGP(num_sibs,num_avunc):
     return (1.0 - 1.0/2.0**(num_avunc)) + (1.0/2.0**(num_avunc+1))*(1.0-1.0/2.0**num_sibs)
@@ -784,17 +767,17 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     tmp = tmpsibav
 
     if sib2_len + av2_len == 1:
-        adj = 2*BACKGROUND*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
-            +BACKGROUND*(1-0.5**sib1_len)
+        adj = 2*mean_ibd_amount*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
+            +mean_ibd_amount*(1-0.5**sib1_len)
     elif sib1_len + av1_len == 1:
-        adj = 2*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
-            +BACKGROUND*(1-0.5**sib2_len)
+        adj = 2*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
+            +mean_ibd_amount*(1-0.5**sib2_len)
     else:
-        adj = 4*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
+        adj = 4*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
         *(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
-            + 2*BACKGROUND*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
-            + 2*BACKGROUND*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
-            + BACKGROUND*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
+            + 2*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
+            + 2*mean_ibd_amount*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
+            + mean_ibd_amount*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
 
    
     tmpsibav = max(0, tmpsibav-adj)
@@ -1047,7 +1030,11 @@ def getTotalLength(IBD):
 
     return total
 
-def getAllRel(results_file, inds_file):
+
+def null_likelihood():
+    return None
+
+def getAllRel(results_file, inds_file, all_segs):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
     # store pairwise relatedness information
@@ -1077,7 +1064,7 @@ def getAllRel(results_file, inds_file):
             ibd2 = float(l[3])
 
             #MY MODIFICATION STARTS HERE
-            ibd1 = max(0, ibd1 - BACKGROUND / total_genome) #Well, some of the background IBD will exhibit in the form of IBD2, need to think about this!
+            ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome) #Well, some of the mean_ibd_amount IBD will exhibit in the form of IBD2, need to think about this!
             #MY MODIFICATION ENDS HERE
             
             K = ibd1/4.0 + ibd2/2.0
@@ -1097,6 +1084,23 @@ def getAllRel(results_file, inds_file):
                 second.append([ind1,ind2])
             elif degree == 3:
                 third.append([ind1, ind2])
+            else:
+                tmp = getIBDsegments(ind1, ind2, all_segs)
+                #tmp1, tmp2 store ibd1, ibd2 segments, respectively
+                tmp1, tmp2 = tmp[0], tmp[1]
+                #compile a list of ibds between ibd1 and ibd2
+                #for an ERSA like approach, we simply need a list of ibd length, nothing else
+                ibd_list = []
+                for chr in range(num_chrs):
+                    for start, end in tmp1[chr]:
+                        ibd_list.append(end - start)
+                    for start, end in tmp2[chr]:
+                        #should be rare to have ibd2 in degree 4 or more distant relatives
+                        #we just treat ibd2 as 2 separate ibd1 here
+                        ibd_list.append(end - start)
+                        ibd_list.append(end - start)
+                print(f'{ind1}, {ind2}')
+                print(ibd_list)
 
 
     file.close()
@@ -1605,6 +1609,7 @@ def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile):
                                     printResult([t1, t2, total, refined, 'graph+inferredt5'], outfile)
                                     checked.add(this_pair)
 
+#MY MODIFICATION BELOW
 
 def readNe(NeFile):
     N = []
@@ -1617,6 +1622,8 @@ def readNe(NeFile):
     return np.array(N)
 
 def expectation_num_segment(N, u):
+    global mean_seg_num
+
     G = len(N)
     gen = np.arange(1, G+1)
     sum_log_prob_not_coalesce = np.cumsum(np.insert(np.log(1-1/(2*N)), 0, 0))
@@ -1628,8 +1635,9 @@ def expectation_num_segment(N, u):
     log_term2 = -np.log(100*N_G) + sum_log_prob_not_coalesce[-1] + \
         (G+1)*(np.log(2*N_G)-np.log(2*N_G-1)) + alpha*(G+1) + np.log(1+G*(1-np.exp(alpha))) -\
        2*np.log(1-np.exp(alpha))
-
-    return total_genome*(np.exp(log_term1)+np.exp(log_term2))
+    
+    mean_seg_num = total_genome*(np.exp(log_term1)+np.exp(log_term2))
+    return mean_seg_num
 
 def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, C, n_p):
     def partb(g, n_g, maxgen, C, chromlen):
@@ -1643,10 +1651,14 @@ def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, C, n_p):
     return np.log(n_p) - np.log(2*n_past) + np.sum(np.log(1-1/(2*n))) + np.log((integral1 + integral2)/2)
 
 def expectedibdsharing(n, chr_len_cm, C):
+    global mean_ibd_amount
     g = len(n)
     gen = np.arange(1, g+1)
     log_term3 = np.log(np.sum(C*(chr_len_cm[:,np.newaxis]@gen.reshape((1, g)))/50 + chr_len_cm[:,np.newaxis] - ((C**2)*gen)/50, axis=0))
     sum_log_prob_not_coalesce = np.cumsum(np.insert(np.log(1-1/(2*n)), 0, 0))[:-1]
     log_expectation = np.log(4) + sum_log_prob_not_coalesce - np.log(2*n) - C*gen/50 + log_term3
     log_expectation = np.append(log_expectation, log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, g, C, 4)) #need to calculate expected amount of ibd coalescing beyond maxgen generations into the past
-    return np.sum(np.exp(log_expectation))
+
+    mean_ibd_amount = np.sum(np.exp(log_expectation))
+    return mean_ibd_amount
+

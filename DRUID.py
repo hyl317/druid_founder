@@ -52,22 +52,22 @@ global total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_e
 [total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs] = getChrInfo(args.m[0])
 print("Genome length: " + str(total_genome)+'\n')
 
-# Get IBD1/2 info
-#[all_rel,inds,first,second,third] = getAllRel(args.i[0],args.u[0])
-#print("Total number of individuals: " + str(len(inds)))
-
-global founder, mean_seg_num, mean_ibd_len
+global founder, mean_seg_num, mean_ibd_amount
 founder = args.N != None
 if founder:
     C = args.minIBD
     N = readNe(args.N)
     mean_seg_num = 4*expectation_num_segment(N, C)
-    mean_ibd_len = expectedibdsharing(N, np.array(chrom_ends) - np.array(chrom_starts), C)
-print(chrom_starts)
-print(chrom_ends)
-print(f'founder: {founder}')
-print(f'mean_seg_num: {mean_seg_num}')
-print(f'mean_ibd_len: {mean_ibd_len}')
+    mean_ibd_amount = expectedibdsharing(N, np.array(chrom_ends) - np.array(chrom_starts), C)
+    print('Correcting for founder effect')
+    print(f'mean IBD segment number: {mean_seg_num}')
+    print(f'mean total IBD sharing amount: {mean_ibd_amount}')
+
+# Get IBD1/2 info
+all_segs = readSegments(args.s[0])
+[all_rel,inds,first,second,third] = getAllRel(args.i[0], args.u[0], all_segs)
+print("Total number of individuals: " + str(len(inds)))
+
 
 #make graph
 rel_graph = nx.DiGraph()
@@ -80,7 +80,7 @@ if args.f[0] != '':
 print("\nInferring first degree relatives")
 inferFirst(rel_graph, rel_graph_tmp, all_rel, first, second, int(args.C[0]))
 
-all_segs = readSegments(args.s[0])
+
 
 # infer second degree & aunts/uncles of sibling sets
 print("\nInferring second degree relatives")
