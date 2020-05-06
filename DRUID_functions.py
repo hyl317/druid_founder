@@ -9,7 +9,6 @@ from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
-C = 2
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
@@ -1033,14 +1032,13 @@ def getTotalLength(IBD):
     return total
 
 
-def null_likelihood(ibd_list):
-    global C
+def null_likelihood(ibd_list, C):
     pois_part = scipy.stats.poisson.logpmf(len(ibd_list), mean_seg_num)
     theta = mean_ibd_amount / mean_seg_num - C
     exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
     return pois_part + exp_part
 
-def alter_likelihood(ibd_list):
+def alter_likelihood(ibd_list, C):
     D = 10 #any relationship more distant than 10 will be considered "unrelated"
     num_ibd = len(ibd_list)
     theta = mean_ibd_amount / mean_seg_num - C
@@ -1062,7 +1060,7 @@ def alter_likelihood(ibd_list):
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
-def getAllRel(results_file, inds_file, all_segs):
+def getAllRel(results_file, inds_file, all_segs, C):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
     # store pairwise relatedness information
@@ -1130,17 +1128,17 @@ def getAllRel(results_file, inds_file, all_segs):
 
                 ibd_list.sort()
                 ibd_list = np.array(ibd_list)
-                null_lik = null_likelihood(ibd_list)
-                alter_lik, d, a, n_p = alter_likelihood(ibd_list)
+                null_lik = null_likelihood(ibd_list, C)
+                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
                 alter_lik = max(alter_lik, null_lik)
                 chi2 = -2*(null_lik - alter_lik)
                 p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                print(f'degree estimated from K: {degree}')
+                print(f'degree estimated from K: {degree}', flush=True)
                 if p_value < 0.01:
                     degree = d
                 else:
                     degree = -1
-                print(f'degree estimated from ERSA-like approach: {degree}')
+                print(f'degree estimated from ERSA-like approach: {degree}', flush=True)
 
             all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 

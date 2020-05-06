@@ -65,7 +65,7 @@ if founder:
 
 # Get IBD1/2 info
 all_segs = readSegments(args.s[0])
-[all_rel,inds,first,second,third] = getAllRel(args.i[0], args.u[0], all_segs)
+[all_rel,inds,first,second,third] = getAllRel(args.i[0], args.u[0], all_segs, args.minIBD)
 print("Total number of individuals: " + str(len(inds)))
 
 
