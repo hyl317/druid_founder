@@ -8,7 +8,8 @@ import scipy.stats
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
-global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount, C
+global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
+C = 2
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
@@ -1127,7 +1128,7 @@ def getAllRel(results_file, inds_file, all_segs):
                         ibd_list.append(end - start)
                         ibd_list.append(end - start)
 
-                sort(ibd_list)
+                ibd_list.sort()
                 ibd_list = np.array(ibd_list)
                 null_lik = null_likelihood(ibd_list)
                 alter_lik, d, a, n_p = alter_likelihood(ibd_list)
