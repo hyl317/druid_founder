@@ -4,10 +4,11 @@ import copy
 import numpy as np
 from scipy.integrate import quad
 from scipy.special import logsumexp
+import scipy.stats
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 
-global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
+global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount, C
 
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
@@ -1031,8 +1032,34 @@ def getTotalLength(IBD):
     return total
 
 
-def null_likelihood():
-    return None
+def null_likelihood(ibd_list):
+    global C
+    pois_part = scipy.stats.poisson.logpmf(len(ibd_list), mean_seg_num)
+    theta = mean_ibd_amount / mean_seg_num - C
+    exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
+    return pois_part + exp_part
+
+def alter_likelihood(ibd_list):
+    D = 10 #any relationship more distant than 10 will be considered "unrelated"
+    num_ibd = len(ibd_list)
+    theta = mean_ibd_amount / mean_seg_num - C
+
+    results = np.full((D+1, 3, num_ibd), -np.inf)
+
+    for d in range(4, D+1):
+        for a in range(1,3):
+            mean_seg_num_ancestry = a*((total_genome/100)*d + num_chrs)*np.exp(-d*C/100)/(2**(d-1))
+            for n_p in range(0, num_ibd):
+                #in theory, we should also calculate the value when n_p = len(ibd_list). But that is the same as the null model. So no need to repeat that calculation. 
+                pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
+                pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
+                exp_part_pop = np.sum(-(ibd_list[:n_p] - C)/theta - np.log(theta)) 
+                exp_part_ancestry = np.sum(-d*(ibd_list[n_p:] - C)/100 - np.log(100/d))
+                results[d, a, n_p] = pois_part_pop + pois_part_ancestry + exp_part_pop + exp_part_ancestry
+
+    dim1, dim2, dim3 = np.where(results == np.max(results))
+    d, a, n_p = dim1[0], dim2[0], dim3[0]
+    return results[d, a, n_p], d, a, n_p
 
 def getAllRel(results_file, inds_file, all_segs):
     # read in results file:
@@ -1077,7 +1104,7 @@ def getAllRel(results_file, inds_file, all_segs):
                 ind2 = l[0]
             if not ind1 in all_rel.keys():
                 all_rel[ind1] = {} #IBD1, IBD2, K, D
-            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+
             if degree == 1:
                 first.append([ind1,ind2])
             elif degree == 2:
@@ -1099,9 +1126,22 @@ def getAllRel(results_file, inds_file, all_segs):
                         #we just treat ibd2 as 2 separate ibd1 here
                         ibd_list.append(end - start)
                         ibd_list.append(end - start)
-                print(f'{ind1}, {ind2}')
-                print(ibd_list)
 
+                sort(ibd_list)
+                ibd_list = np.array(ibd_list)
+                null_lik = null_likelihood(ibd_list)
+                alter_lik, d, a, n_p = alter_likelihood(ibd_list)
+                alter_lik = max(alter_lik, null_lik)
+                chi2 = -2*(null_lik - alter_lik)
+                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                print(f'degree estimated from K: {degree}')
+                if p_value < 0.01:
+                    degree = d
+                else:
+                    degree = -1
+                print(f'degree estimated from ERSA-like approach: {degree}')
+
+            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 
     file.close()
 
