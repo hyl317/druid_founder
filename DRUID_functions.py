@@ -1133,7 +1133,9 @@ def getAllRel(results_file, inds_file, all_segs, C):
                 alter_lik = max(alter_lik, null_lik)
                 chi2 = -2*(null_lik - alter_lik)
                 p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                print(f'degree estimated from K: {degree}', flush=True)
+                print(f'total number of IBD segments: {len(ibd_list)}', flush=True)
+                print(ibd_list, flush=True)
+                print(f'degree estimated from K for {ind1}, {ind2}: {degree}', flush=True)
                 if p_value < 0.01:
                     degree = d
                 else:
