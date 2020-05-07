@@ -29,6 +29,7 @@ parser.add_argument('-F', type=int, nargs=1, default=[0], help='Whether to outpu
 parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 200 generations.", metavar="Ne trajectory")
 parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="minimum length(in centiMorgan) of IBD detected")
 parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file. gzipped')
+parser.add_argument('--useK', action="store_true")
 args=parser.parse_args()
 
 inds = []
@@ -63,11 +64,12 @@ if founder:
     print('Correcting for founder effect')
     print(f'mean IBD segment number: {mean_seg_num}')
     print(f'mean total IBD sharing amount: {mean_ibd_amount}')
+    print(f'use Kinship coefficient? {args.useK}')
 
 # Get IBD1/2 info
 all_segs = readSegments(args.s[0])
 hapibd_segs = readHapIBD(args.hapibd)
-[all_rel,inds,first,second,third] = getAllRel(args.i[0], args.u[0], hapibd_segs, args.minIBD)
+[all_rel,inds,first,second,third] = getAllRel(args.i[0], args.u[0], hapibd_segs, args.minIBD, args.useK)
 print("Total number of individuals: " + str(len(inds)))
 
 

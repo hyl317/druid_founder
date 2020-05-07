@@ -1086,7 +1086,7 @@ def alter_likelihood(ibd_list, C):
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
-def getAllRel(results_file, inds_file, hapibd_segs, C):
+def getAllRel(results_file, inds_file, hapibd_segs, C, useK):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
     # store pairwise relatedness information
@@ -1136,7 +1136,7 @@ def getAllRel(results_file, inds_file, hapibd_segs, C):
                 second.append([ind1,ind2])
             elif degree == 3:
                 third.append([ind1, ind2])
-            else:
+            elif not useK:
                 #tmp = getIBDsegments(ind1, ind2, all_segs)
                 ##tmp1, tmp2 store ibd1, ibd2 segments, respectively
                 #tmp1, tmp2 = tmp[0], tmp[1]
@@ -1164,17 +1164,17 @@ def getAllRel(results_file, inds_file, hapibd_segs, C):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    print(f'{ind1}, {ind2}')
+                    #print(f'{ind1}, {ind2}')
                     #print(f'number of ibd segments: {len(ibd_list)}')
                     #print(ibd_list)
                     #print(f'null likelihood: {null_lik}')
                     #print(f'alternative likelihood: {alter_lik}')
-                    print(f'degree estimated from K: {degree}', flush=True)
+                    #print(f'degree estimated from K: {degree}', flush=True)
                     if p_value < 0.01:
                         degree = d
                     else:
                         degree = -1
-                    print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
+                    #print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
 
             all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 
