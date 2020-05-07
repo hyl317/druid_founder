@@ -58,7 +58,7 @@ founder = args.N != None
 if founder:
     C = args.minIBD
     N = readNe(args.N)
-    mean_seg_num = 4*expectation_num_segment(N, C)
+    mean_seg_num = expectation_num_segment(N, C)
     mean_ibd_amount = expectedibdsharing(N, np.array(chrom_ends) - np.array(chrom_starts), C)
     print('Correcting for founder effect')
     print(f'mean IBD segment number: {mean_seg_num}')

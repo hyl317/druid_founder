@@ -154,14 +154,14 @@ def readHapIBD(file_for_hapibd):
         while line:
             ind1, _, ind2, _, chr, _, _, len = line.strip().split('\t')
             ids = (min(ind1, ind2), max(ind1, ind2))
-            if not ids[0] in all_segs:
+            if not ids[0] in hapibd_segs:
                 hapibd_segs[ ids[0] ] = \
                     { ids[1]: { chr : [] for chr in range(num_chrs) } }
-            elif not ids[1] in all_segs[ ids[0] ]:
+            elif not ids[1] in hapibd_segs[ ids[0] ]:
                 hapibd_segs[ ids[0] ][ ids[1] ] = \
                                 { chr : [] for chr in range(num_chrs) }
 
-            hapibd_segs[ids[0]][ids[1]][int(chr)].append(float(len))
+            hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(float(len))
             line = file.readline()
     return hapibd_segs
 
@@ -1058,7 +1058,10 @@ def getTotalLength(IBD):
 def null_likelihood(ibd_list, C):
     pois_part = scipy.stats.poisson.logpmf(len(ibd_list), mean_seg_num)
     theta = mean_ibd_amount / mean_seg_num - C
+    #print(f'mean_seg_num: {mean_seg_num}, theta: {theta}')
     exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
+    #print(f'pois_part: {pois_part}')
+    #print(f'exp_part: {exp_part}')
     return pois_part + exp_part
 
 def alter_likelihood(ibd_list, C):
@@ -1161,14 +1164,17 @@ def getAllRel(results_file, inds_file, hapibd_segs, C):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    print(f'number of ibd segments: {len(ibd_list)}')
-                    print(ibd_list)
+                    print(f'{ind1}, {ind2}')
+                    #print(f'number of ibd segments: {len(ibd_list)}')
+                    #print(ibd_list)
+                    #print(f'null likelihood: {null_lik}')
+                    #print(f'alternative likelihood: {alter_lik}')
                     print(f'degree estimated from K: {degree}', flush=True)
                     if p_value < 0.01:
                         degree = d
                     else:
                         degree = -1
-                    print(f'degree estimated from ERSA-like approach: {degree}', flush=True)
+                    print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
 
             all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 
@@ -1705,7 +1711,7 @@ def expectation_num_segment(N, u):
         (G+1)*(np.log(2*N_G)-np.log(2*N_G-1)) + alpha*(G+1) + np.log(1+G*(1-np.exp(alpha))) -\
        2*np.log(1-np.exp(alpha))
     
-    mean_seg_num = total_genome*(np.exp(log_term1)+np.exp(log_term2))
+    mean_seg_num = 4*total_genome*(np.exp(log_term1)+np.exp(log_term2))
     return mean_seg_num
 
 def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, C, n_p):
