@@ -1165,10 +1165,10 @@ def getAllRel(results_file, inds_file, hapibd_segs, C, useK):
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
                     print(f'{ind1}, {ind2}')
-                    #print(f'number of ibd segments: {len(ibd_list)}')
-                    #print(ibd_list)
-                    #print(f'null likelihood: {null_lik}')
-                    #print(f'alternative likelihood: {alter_lik}')
+                    print(f'number of ibd segments: {len(ibd_list)}')
+                    print(ibd_list)
+                    print(f'null likelihood: {null_lik}')
+                    print(f'alternative likelihood: {alter_lik}')
                     print(f'degree estimated from K: {degree}', flush=True)
                     if p_value < 0.01:
                         degree = d
