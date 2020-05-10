@@ -1075,7 +1075,7 @@ def alter_likelihood(ibd_list, C):
     for d in range(4, D+1):
         for a in range(1,3):
             #mean_seg_num_ancestry = a*((total_genome/100)*d + num_chrs)*np.exp(-d*C/100)/(2**(d-1))
-            mean_seg_num_ancestry = mean_seg_num_ancestry_list[a, d]
+            mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
             for n_p in range(0, num_ibd):
                 #in theory, we should also calculate the value when n_p = len(ibd_list). But that is the same as the null model. So no need to repeat that calculation. 
                 pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
