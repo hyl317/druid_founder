@@ -1207,6 +1207,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
                     #    degree = -1
                     #print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
     total_num_comparison = len(results)
+    print(f'total number of comparison for bonf: {total_num_comparison}')
     for pair in results:
         if pair.p < 0.05/total_num_comparison:
             all_rel[pair.ind1][pair.ind2][3] = pair.d
@@ -1237,11 +1238,9 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
     results.sort(key=attrgetter('p'))
     p_sort = np.array([pair.p for pair in results])
     q_val = len(results)*p_sort/np.arange(1, len(results)+1)
-    index = np.max(np.where(q_val <= fdr))
-    for i, pair in enumerate(results):
-        item = results[i]
-        degree = item.d if i <= index else -1
-        all_rel[item.ind1][item.ind2][3] = degree
+    p_cut = np.max(p_sort[np.where(q_val <= fdr)])
+    for pair in results:
+        all_rel[item.ind1][item.ind2][3] = pair.d if pair.p <= p_cut else -1
 
 
 
