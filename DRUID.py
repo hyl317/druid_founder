@@ -69,7 +69,7 @@ if founder:
 # Get IBD1/2 info
 all_segs = readSegments(args.s[0])
 hapibd_segs = readHapIBD(args.hapibd)
-[all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0], hapibd_segs, args.minIBD, args.useK)
+[all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
 print("Total number of individuals: " + str(len(inds)))
 
 total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)

@@ -1171,10 +1171,11 @@ def getAllRel(results_file, inds_file):
     return [all_rel,inds,first,second,third]
 
 
-def ersa_bonferroni(all_rel, hapibd_seg, total_num_comparison, C):
+def ersa_bonferroni(all_rel, hapibd_segs, total_num_comparison, C):
     for ind1 in all_rel:
         for ind2 in all_rel[ind1]:
-            if all_rel[ind1][ind2][3] <= 3:
+            if all_rel[ind1][ind2][3] in [1,2,3]:
+                print('close relatives')
                 return
             else:
                 if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
