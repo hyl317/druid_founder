@@ -1088,7 +1088,7 @@ def alter_likelihood(ibd_list, C):
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
-def getAllRel(results_file, inds_file, hapibd_segs, C, useK):
+def getAllRel(results_file, inds_file):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
     # store pairwise relatedness information
@@ -1132,28 +1132,51 @@ def getAllRel(results_file, inds_file, hapibd_segs, C, useK):
             if not ind1 in all_rel.keys():
                 all_rel[ind1] = {} #IBD1, IBD2, K, D
 
+            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+
             if degree == 1:
                 first.append([ind1,ind2])
             elif degree == 2:
                 second.append([ind1,ind2])
             elif degree == 3:
                 third.append([ind1, ind2])
-            elif not useK:
-                #tmp = getIBDsegments(ind1, ind2, all_segs)
-                ##tmp1, tmp2 store ibd1, ibd2 segments, respectively
-                #tmp1, tmp2 = tmp[0], tmp[1]
-                ##compile a list of ibds between ibd1 and ibd2
-                ##for an ERSA like approach, we simply need a list of ibd length, nothing else
-                #ibd_list = []
-                #for chr in range(num_chrs):
-                #    for start, end in tmp1[chr]:
-                #        ibd_list.append(end - start)
-                #    for start, end in tmp2[chr]:
-                #        #should be rare to have ibd2 in degree 4 or more distant relatives
-                #        #we just treat ibd2 as 2 separate ibd1 here
-                #        ibd_list.append(end - start)
-                #        ibd_list.append(end - start)
+            #elif not useK:
+            #    if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+            #        ibd_list = []
+            #        for chr in range(num_chrs):
+            #            ibd_list.extend(hapibd_segs[ind1][ind2][chr])
 
+            #        ibd_list.sort()
+            #        ibd_list = np.array(ibd_list)
+            #        null_lik = null_likelihood(ibd_list, C)
+            #        alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+            #        alter_lik = max(alter_lik, null_lik)
+            #        chi2 = -2*(null_lik - alter_lik)
+            #        p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+            #        print(f'{ind1}, {ind2}')
+            #        print(f'number of ibd segments: {len(ibd_list)}')
+            #        print(ibd_list)
+            #        print(f'null likelihood: {null_lik}')
+            #        print(f'alternative likelihood: {alter_lik}')
+            #        print(f'degree estimated from K: {degree}', flush=True)
+            #        if p_value < 0.01:
+            #            degree = d
+            #        else:
+            #            degree = -1
+            #        print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
+
+            #all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+
+    file.close()
+    return [all_rel,inds,first,second,third]
+
+
+def ersa_bonferroni(all_rel, hapibd_seg, total_num_comparison, C):
+    for ind1 in all_rel:
+        for ind2 in all_rel[ind1]:
+            if all_rel[ind1][ind2][3] <= 3:
+                return
+            else:
                 if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
                     ibd_list = []
                     for chr in range(num_chrs):
@@ -1171,18 +1194,13 @@ def getAllRel(results_file, inds_file, hapibd_segs, C, useK):
                     print(ibd_list)
                     print(f'null likelihood: {null_lik}')
                     print(f'alternative likelihood: {alter_lik}')
-                    print(f'degree estimated from K: {degree}', flush=True)
-                    if p_value < 0.01:
+                    print(f'degree estimated from K: {all_rel[ind1][ind2][3]}', flush=True)
+                    if p_value < 0.05/total_num_comparison:
                         degree = d
                     else:
                         degree = -1
                     print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
-
-            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
-
-    file.close()
-
-    return [all_rel,inds,first,second,third]
+                    all_rel[ind1][ind2][3] = degree
 
 
 def getSecondDegreeRelatives(rel_graph, second, sibset, par, all_rel):
