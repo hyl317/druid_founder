@@ -1235,7 +1235,7 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
-    p_sort = np.array(pair.p for pair in results)
+    p_sort = np.array([pair.p for pair in results])
     q_val = len(results)*p_sort/np.arange(1, len(results)+1)
     index = np.max(np.where(q_val <= fdr))
     for i, pair in enumerate(results):
