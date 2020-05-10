@@ -29,6 +29,7 @@ parser.add_argument('-F', type=int, nargs=1, default=[0], help='Whether to outpu
 parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 200 generations.", metavar="Ne trajectory")
 parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="minimum length(in centiMorgan) of IBD detected")
 parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file. gzipped')
+parser.add_argument('--FDR', type='store_true')
 parser.add_argument('--useK', action="store_true")
 args=parser.parse_args()
 
@@ -74,7 +75,10 @@ print("Total number of individuals: " + str(len(inds)))
 
 total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)
 if not args.useK:
-    ersa_bonferroni(all_rel, hapibd_segs, total_num_comparison, args.minIBD)
+    if args.FDR:
+        ersa_FDR(all_rel, hapibd_segs, args.minIBD)
+    else:
+        ersa_bonferroni(all_rel, hapibd_segs, args.minIBD)
 
 #make graph
 rel_graph = nx.DiGraph()

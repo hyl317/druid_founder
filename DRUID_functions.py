@@ -6,6 +6,8 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.special import logsumexp
 import scipy.stats
+from collections import namedtuple
+from operator import attrgetter
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 from constant import *
@@ -1171,7 +1173,9 @@ def getAllRel(results_file, inds_file):
     return [all_rel,inds,first,second,third]
 
 
-def ersa_bonferroni(all_rel, hapibd_segs, total_num_comparison, C):
+def ersa_bonferroni(all_rel, hapibd_segs, C):
+    results = []
+    Pair = namedtuple('Pair', 'ind1 ind2 p d')
     for ind1 in all_rel:
         for ind2 in all_rel[ind1]:
             if all_rel[ind1][ind2][3] in [1,2,3]:
@@ -1190,18 +1194,55 @@ def ersa_bonferroni(all_rel, hapibd_segs, total_num_comparison, C):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    print(f'{ind1}, {ind2}')
-                    print(f'number of ibd segments: {len(ibd_list)}')
-                    print(ibd_list)
-                    print(f'null likelihood: {null_lik}')
-                    print(f'alternative likelihood: {alter_lik}')
-                    print(f'degree estimated from K: {all_rel[ind1][ind2][3]}', flush=True)
-                    if p_value < 0.05/total_num_comparison:
-                        degree = d
-                    else:
-                        degree = -1
-                    print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
-                    all_rel[ind1][ind2][3] = degree
+                    results.append(Pair(ind1, ind2, p_value, d))
+                    #print(f'{ind1}, {ind2}')
+                    #print(f'number of ibd segments: {len(ibd_list)}')
+                    #print(ibd_list)
+                    #print(f'null likelihood: {null_lik}')
+                    #print(f'alternative likelihood: {alter_lik}')
+                    #print(f'degree estimated from K: {all_rel[ind1][ind2][3]}', flush=True)
+                    #if p_value < 0.05/total_num_comparison:
+                    #    degree = d
+                    #else:
+                    #    degree = -1
+                    #print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
+    total_num_comparison = len(results)
+    for pair in results:
+        if pair.p < 0.05/total_num_comparison:
+            all_rel[pair.ind1][pair.ind2][3] = pair.d
+        else:
+            all_rel[pair.ind1][pair.ind2][3] = -1
+
+
+def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
+    results = []
+    Pair = namedtuple('Pair', 'ind1 ind2 p d')
+    for ind1 in all_rel:
+        for ind2 in all_rel[ind1]:
+            if not all_rel[ind1][ind2][3] in [1,2,3]:
+                if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+                    ibd_list = []
+                    for chr in range(num_chrs):
+                        ibd_list.extend(hapibd_segs[ind1][ind2][chr])
+
+                    ibd_list.sort()
+                    ibd_list = np.array(ibd_list)
+                    null_lik = null_likelihood(ibd_list, C)
+                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+                    alter_lik = max(alter_lik, null_lik)
+                    chi2 = -2*(null_lik - alter_lik)
+                    p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                    results.append(Pair(ind1, ind2, p_value, d))
+
+    results.sort(key=attrgetter('p'))
+    p_sort = np.array(pair.p for pair in results)
+    q_val = len(results)*p_sort/np.arange(1, len(results)+1)
+    index = np.max(np.where(q_val <= fdr))
+    for i, pair in enumerate(results):
+        item = results[i]
+        degree = item.d if i <= index else -1
+        all_rel[item.ind1][item.ind2][3] = degree
+
 
 
 def getSecondDegreeRelatives(rel_graph, second, sibset, par, all_rel):
