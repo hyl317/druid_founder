@@ -1180,7 +1180,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
         for ind2 in all_rel[ind1]:
             if all_rel[ind1][ind2][3] in [1,2,3]:
                 print('close relatives')
-                return
+                continue
             else:
                 if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
                     ibd_list = []
@@ -1240,7 +1240,7 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
     q_val = len(results)*p_sort/np.arange(1, len(results)+1)
     p_cut = np.max(p_sort[np.where(q_val <= fdr)])
     for pair in results:
-        all_rel[item.ind1][item.ind2][3] = pair.d if pair.p <= p_cut else -1
+        all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
 
 
 
