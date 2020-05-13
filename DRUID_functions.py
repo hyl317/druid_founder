@@ -1074,9 +1074,10 @@ def alter_likelihood(ibd_list, C):
 
     results = np.full((D+1, 3, num_ibd), -np.inf)
 
-    for d in range(4, D+1):
+    for d in range(1, D+1):
         for a in range(1,3):
-            #mean_seg_num_ancestry = a*((total_genome/100)*d + num_chrs)*np.exp(-d*C/100)/(2**(d-1))
+            if a == 1 and d == 1:
+                continue
             mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
             for n_p in range(0, num_ibd):
                 #in theory, we should also calculate the value when n_p = len(ibd_list). But that is the same as the null model. So no need to repeat that calculation. 
@@ -1092,7 +1093,7 @@ def alter_likelihood(ibd_list, C):
 
 def getAllRel(results_file, inds_file):
     # read in results file:
-    # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D
+    # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D]
     # store pairwise relatedness information
     global inds
     first = [] #list of first degree relative pairs according to Refined IBD results
@@ -1142,32 +1143,6 @@ def getAllRel(results_file, inds_file):
                 second.append([ind1,ind2])
             elif degree == 3:
                 third.append([ind1, ind2])
-            #elif not useK:
-            #    if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
-            #        ibd_list = []
-            #        for chr in range(num_chrs):
-            #            ibd_list.extend(hapibd_segs[ind1][ind2][chr])
-
-            #        ibd_list.sort()
-            #        ibd_list = np.array(ibd_list)
-            #        null_lik = null_likelihood(ibd_list, C)
-            #        alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
-            #        alter_lik = max(alter_lik, null_lik)
-            #        chi2 = -2*(null_lik - alter_lik)
-            #        p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-            #        print(f'{ind1}, {ind2}')
-            #        print(f'number of ibd segments: {len(ibd_list)}')
-            #        print(ibd_list)
-            #        print(f'null likelihood: {null_lik}')
-            #        print(f'alternative likelihood: {alter_lik}')
-            #        print(f'degree estimated from K: {degree}', flush=True)
-            #        if p_value < 0.01:
-            #            degree = d
-            #        else:
-            #            degree = -1
-            #        print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
-
-            #all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
 
     file.close()
     return [all_rel,inds,first,second,third]
@@ -1234,6 +1209,32 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
                     results.append(Pair(ind1, ind2, p_value, d))
+
+    results.sort(key=attrgetter('p'))
+    p_sort = np.array([pair.p for pair in results])
+    q_val = len(results)*p_sort/np.arange(1, len(results)+1)
+    p_cut = np.max(p_sort[np.where(q_val <= fdr)])
+    for pair in results:
+        all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
+
+def ersa_FDR_all(all_rel, hapibd_segs, C, fdr=0.05):
+    results = []
+    Pair = namedtuple('Pair', 'ind1 ind2 p d')
+    for ind1 in all_rel:
+        for ind2 in all_rel[ind1]:
+            if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+                ibd_list = []
+                for chr in range(num_chrs):
+                    ibd_list.extend(hapibd_segs[ind1][ind2][chr])
+
+                ibd_list.sort()
+                ibd_list = np.array(ibd_list)
+                null_lik = null_likelihood(ibd_list, C)
+                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+                alter_lik = max(alter_lik, null_lik)
+                chi2 = -2*(null_lik - alter_lik)
+                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
     p_sort = np.array([pair.p for pair in results])
