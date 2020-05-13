@@ -1208,6 +1208,10 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                    print(f'{ind1}\t{ind2}', flush=True)
+                    print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
+                    print(f'num of IBD: {len(ibd_list)}', flush=True)
+                    print(ibd_list, flush=True)
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
