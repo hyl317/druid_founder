@@ -77,7 +77,7 @@ total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - le
 if not args.useK:
     if args.FDR:
         #ersa_FDR(all_rel, hapibd_segs, args.minIBD)
-        ersa_FDR(all_rel, hapibd_segs, args.minIBD)
+        ersa_FDR_all(all_rel, hapibd_segs, args.minIBD)
     else:
         ersa_bonferroni(all_rel, hapibd_segs, args.minIBD)
 
