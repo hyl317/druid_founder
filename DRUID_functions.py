@@ -5,6 +5,7 @@ import gzip
 import numpy as np
 from scipy.integrate import quad
 from scipy.special import logsumexp
+from numba import jit
 import scipy.stats
 from collections import namedtuple
 from operator import attrgetter
@@ -1067,6 +1068,7 @@ def null_likelihood(ibd_list, C):
     #print(f'exp_part: {exp_part}')
     return pois_part + exp_part
 
+@jit(parallel=True)
 def alter_likelihood(ibd_list, C):
     D = 10 #any relationship more distant than 10 will be considered "unrelated"
     num_ibd = len(ibd_list)
@@ -1147,7 +1149,7 @@ def getAllRel(results_file, inds_file):
     file.close()
     return [all_rel,inds,first,second,third]
 
-
+@jit(parallel=True)
 def ersa_bonferroni(all_rel, hapibd_segs, C):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
@@ -1189,7 +1191,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
         else:
             all_rel[pair.ind1][pair.ind2][3] = -1
 
-
+@jit(parallel=True)
 def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
@@ -1217,6 +1219,7 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
     for pair in results:
         all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
 
+@jit(parallel=True)
 def ersa_FDR_all(all_rel, hapibd_segs, C, fdr=0.05):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
