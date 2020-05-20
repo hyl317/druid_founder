@@ -152,22 +152,30 @@ def inferFirst(rel_graph, rel_graph_tmp, all_rel, first, second, C):
 #MY MODIFICATION STARTS
 def readHapIBD(file_for_hapibd):
     hapibd_segs = {}
+    hapibd_censored = {}
 
     with gzip.open(file_for_hapibd, 'rt') as file:
         line = file.readline()
         while line:
-            ind1, _, ind2, _, chr, _, _, len = line.strip().split('\t')
+            ind1, _, ind2, _, chr, start_bp, end_bp, len = line.strip().split('\t')
             ids = (min(ind1, ind2), max(ind1, ind2))
             if not ids[0] in hapibd_segs:
                 hapibd_segs[ ids[0] ] = \
                     { ids[1]: { chr : [] for chr in range(num_chrs) } }
+                hapibd_censored[ ids[0] ] = \
+                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
             elif not ids[1] in hapibd_segs[ ids[0] ]:
                 hapibd_segs[ ids[0] ][ ids[1] ] = \
                                 { chr : [] for chr in range(num_chrs) }
+                hapibd_censored[ ids[0] ] = \
+                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
 
             hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(float(len))
+            isCensored = start_bp == chrom_starts[chrom_name_to_idx[chr]] or end_bp == chrom_ends[chrom_name_to_idx[chr]]
+            hapibd_censored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
+
             line = file.readline()
-    return hapibd_segs
+    return hapibd_segs, hapibd_isCensored
 
 
 #MY MODIFICATION ENDS
@@ -1059,16 +1067,17 @@ def getTotalLength(IBD):
     return total
 
 
-def null_likelihood(ibd_list, C):
+def null_likelihood(ibd_list, ibd_isCensored, C):
     pois_part = scipy.stats.poisson.logpmf(len(ibd_list), mean_seg_num)
     theta = mean_ibd_amount / mean_seg_num - C
-    #print(f'mean_seg_num: {mean_seg_num}, theta: {theta}')
-    exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
-    #print(f'pois_part: {pois_part}')
-    #print(f'exp_part: {exp_part}')
+
+    exp_unCensored = -(ibd_list - C)/theta - np.log(theta)
+    exp_Censored = C/theta - ibd_list/theta
+    exp_part = np.sum(exp_Censored*ibd_isCensored) + np.sum(exp_unCensored*(~ibd_isCensored))
+    #exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
     return pois_part + exp_part
 
-def alter_likelihood(ibd_list, C):
+def alter_likelihood(ibd_list, ibd_isCensored, C):
     D = 10 #any relationship more distant than 10 will be considered "unrelated"
     num_ibd = len(ibd_list)
     theta = mean_ibd_amount / mean_seg_num - C
@@ -1086,20 +1095,20 @@ def alter_likelihood(ibd_list, C):
                 num_meiosis = d if a == 1 else d+1
                 pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
                 pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
-                exp_part_pop = np.sum(-(ibd_list[:n_p] - C)/theta - np.log(theta)) 
-                exp_part_ancestry = np.sum(-d*(ibd_list[n_p:] - C)/100 - np.log(100/num_meiosis))
+
+                #exp_part_pop = np.sum(-(ibd_list[:n_p] - C)/theta - np.log(theta)) 
+                #exp_part_ancestry = np.sum(-d*(ibd_list[n_p:] - C)/100 - np.log(100/num_meiosis))
+
+                exp_pop_unCensored = -(ibd_list[:n_p] - C)/theta - np.log(theta)
+                exp_pop_censored = -(ibd_list[:n_p] - C)/theta
+                exp_ancestry_unCensored = -num_meiosis*(ibd_list[n_p:] - C)/100 - np.log(100/num_meiosis)
+                exp_ancestry_censored = -num_meiosis*(ibd_list[n_p:] - C)/100
+                exp_part_pop = np.sum(exp_pop_censored*ibd_isCensored) + np.sum(exp_pop_unCensored*(~ibd_isCensored))
+                exp_part_ancestry = np.sum(exp_ancestry_censored*ibd_isCensored) + np.sum(exp_ancestry_unCensored*(~ibd_isCensored))
+
                 results[d, a, n_p] = pois_part_pop + pois_part_ancestry + exp_part_pop + exp_part_ancestry
-                #if np.isnan(results[d,a,n_p]):
-                #    print(f'{pois_part_pop},{pois_part_ancestry},{exp_part_pop},{exp_part_ancestry}')
-                #    print(f'adjusted mean_seg_num= {mean_seg_num*(1-IBD1_prop)}')
-                #    print(ibd_list)
-                    
 
     dim1, dim2, dim3 = np.where(results == np.max(results))
-    #print(f'dim1: {dim1}')
-    #print(f'dim2: {dim2}')
-    #print(f'dim3: {dim3}')
-    #print(results)
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
@@ -1200,7 +1209,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
         else:
             all_rel[pair.ind1][pair.ind2][3] = -1
 
-def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
+def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
     for ind1 in all_rel:
@@ -1208,13 +1217,17 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
             if not all_rel[ind1][ind2][3] in [1,2,3]:
                 if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
                     ibd_list = []
+                    ibd_isCensored = []
                     for chr in range(num_chrs):
                         ibd_list.extend(hapibd_segs[ind1][ind2][chr])
+                        ibd_isCensored.extend(hapibd_isCensored[ind1][ind2][chr])
 
-                    ibd_list.sort()
-                    ibd_list = np.array(ibd_list)
-                    null_lik = null_likelihood(ibd_list, C)
-                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+                    tmp =  sorted(zip(ibd_list, ibd_isCensored), key=lambda pair: pair[0])
+                    ibd_list, ibd_isCensored = zip(*tmp)
+                    ibd_list, ibd_isCensored = np.array(ibd_list), np.array(ibd_isCensored)
+
+                    null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
+                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, ibd_isCensored, C)
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
@@ -1222,6 +1235,7 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
                     print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
                     print(f'num of IBD: {len(ibd_list)}', flush=True)
                     print(ibd_list, flush=True)
+                    print(ibd_isCensored, flush=True)
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
@@ -1231,34 +1245,34 @@ def ersa_FDR(all_rel, hapibd_segs, C, fdr=0.05):
     for pair in results:
         all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
 
-def ersa_FDR_all(all_rel, hapibd_segs, C, fdr=0.05):
-    results = []
-    Pair = namedtuple('Pair', 'ind1 ind2 p d')
-    for ind1 in all_rel:
-        for ind2 in all_rel[ind1]:
-            if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
-                ibd_list = []
-                for chr in range(num_chrs):
-                    ibd_list.extend(hapibd_segs[ind1][ind2][chr])
+#def ersa_FDR_all(all_rel, hapibd_segs, C, fdr=0.05):
+#    results = []
+#    Pair = namedtuple('Pair', 'ind1 ind2 p d')
+#    for ind1 in all_rel:
+#        for ind2 in all_rel[ind1]:
+#            if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+#                ibd_list = []
+#                for chr in range(num_chrs):
+#                    ibd_list.extend(hapibd_segs[ind1][ind2][chr])
 
-                ibd_list.sort()
-                ibd_list = np.array(ibd_list)
-                null_lik = null_likelihood(ibd_list, C)
-                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
-                alter_lik = max(alter_lik, null_lik)
-                chi2 = -2*(null_lik - alter_lik)
-                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                print(f'{ind1}\t{ind2}\t{d}\t{a}', flush=True)
-                print(f'num of IBD: {len(ibd_list)}', flush=True)
-                print(ibd_list, flush=True)
-                results.append(Pair(ind1, ind2, p_value, d))
+#                ibd_list.sort()
+#                ibd_list = np.array(ibd_list)
+#                null_lik = null_likelihood(ibd_list, C)
+#                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+#                alter_lik = max(alter_lik, null_lik)
+#                chi2 = -2*(null_lik - alter_lik)
+#                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+#                print(f'{ind1}\t{ind2}\t{d}\t{a}', flush=True)
+#                print(f'num of IBD: {len(ibd_list)}', flush=True)
+#                print(ibd_list, flush=True)
+#                results.append(Pair(ind1, ind2, p_value, d))
 
-    results.sort(key=attrgetter('p'))
-    p_sort = np.array([pair.p for pair in results])
-    q_val = len(results)*p_sort/np.arange(1, len(results)+1)
-    p_cut = np.max(p_sort[np.where(q_val <= fdr)])
-    for pair in results:
-        all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
+#    results.sort(key=attrgetter('p'))
+#    p_sort = np.array([pair.p for pair in results])
+#    q_val = len(results)*p_sort/np.arange(1, len(results)+1)
+#    p_cut = np.max(p_sort[np.where(q_val <= fdr)])
+#    for pair in results:
+#        all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
 
 
 
