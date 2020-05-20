@@ -1082,14 +1082,24 @@ def alter_likelihood(ibd_list, C):
             mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
             for n_p in range(0, num_ibd):
                 #in theory, we should also calculate the value when n_p = len(ibd_list). But that is the same as the null model. So no need to repeat that calculation. 
-                IBD1_prop = np.sum(ibd_list[n_p:])/total_genome
-                pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num*(1-IBD1_prop))
+                #IBD1_prop = np.sum(ibd_list[n_p:])/total_genome
+                num_meiosis = d if a == 1 else d+1
+                pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
                 pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
                 exp_part_pop = np.sum(-(ibd_list[:n_p] - C)/theta - np.log(theta)) 
-                exp_part_ancestry = np.sum(-d*(ibd_list[n_p:] - C)/100 - np.log(100/d))
+                exp_part_ancestry = np.sum(-d*(ibd_list[n_p:] - C)/100 - np.log(100/num_meiosis))
                 results[d, a, n_p] = pois_part_pop + pois_part_ancestry + exp_part_pop + exp_part_ancestry
+                #if np.isnan(results[d,a,n_p]):
+                #    print(f'{pois_part_pop},{pois_part_ancestry},{exp_part_pop},{exp_part_ancestry}')
+                #    print(f'adjusted mean_seg_num= {mean_seg_num*(1-IBD1_prop)}')
+                #    print(ibd_list)
+                    
 
     dim1, dim2, dim3 = np.where(results == np.max(results))
+    #print(f'dim1: {dim1}')
+    #print(f'dim2: {dim2}')
+    #print(f'dim3: {dim3}')
+    #print(results)
     d, a, n_p = dim1[0], dim2[0], dim3[0]
     return results[d, a, n_p], d, a, n_p
 
