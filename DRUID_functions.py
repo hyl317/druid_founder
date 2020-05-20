@@ -152,7 +152,7 @@ def inferFirst(rel_graph, rel_graph_tmp, all_rel, first, second, C):
 #MY MODIFICATION STARTS
 def readHapIBD(file_for_hapibd):
     hapibd_segs = {}
-    hapibd_censored = {}
+    hapibd_isCensored = {}
 
     with gzip.open(file_for_hapibd, 'rt') as file:
         line = file.readline()
@@ -162,17 +162,17 @@ def readHapIBD(file_for_hapibd):
             if not ids[0] in hapibd_segs:
                 hapibd_segs[ ids[0] ] = \
                     { ids[1]: { chr : [] for chr in range(num_chrs) } }
-                hapibd_censored[ ids[0] ] = \
+                hapibd_isCensored[ ids[0] ] = \
                     { ids[1]: { chr : [] for chr in range(num_chrs) } }
             elif not ids[1] in hapibd_segs[ ids[0] ]:
                 hapibd_segs[ ids[0] ][ ids[1] ] = \
                                 { chr : [] for chr in range(num_chrs) }
-                hapibd_censored[ ids[0] ] = \
-                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
+                hapibd_isCensored[ ids[0] ][ ids[1] ] = \
+                                { chr : [] for chr in range(num_chrs) }
 
             hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(float(len))
-            isCensored = start_bp == chrom_starts[chrom_name_to_idx[chr]] or end_bp == chrom_ends[chrom_name_to_idx[chr]]
-            hapibd_censored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
+            isCensored = int(start_bp) == chrom_starts_bp[chrom_name_to_idx[chr]] or int(end_bp) == chrom_ends_bp[chrom_name_to_idx[chr]]
+            hapibd_isCensored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
 
             line = file.readline()
     return hapibd_segs, hapibd_isCensored
@@ -307,11 +307,13 @@ def getFamInfo(famfile, inds):
 
 def getChrInfo(mapfile):
     #read in information from .map file
-    global total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs
+    global total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs, chrom_starts_bp, chrom_ends_bp
     chrom_name_to_idx = {}
     chrom_idx_to_name = []
     chrom_starts = []
     chrom_ends = []
+    chrom_starts_bp = []
+    chrom_ends_bp = []
     num_chrs = 0
 
     file = open(mapfile,'r')
@@ -324,14 +326,19 @@ def getChrInfo(mapfile):
             num_chrs += 1
             chrom_starts.append(99999999)
             chrom_ends.append(0)
+            chrom_starts_bp.append(99999999)
+            chrom_ends_bp.append(0)
         else:
             chr = chrom_name_to_idx[chr_name]
 
         pos = float(l[2])
+        bp = int(l[3])
         if chrom_starts[chr] > pos:
             chrom_starts[chr] = pos
+            chrom_starts_bp[chr] = bp
         if chrom_ends[chr] < pos:
             chrom_ends[chr] = pos
+            chrom_ends_bp[chr] = bp
 
     file.close()
 
@@ -1086,8 +1093,6 @@ def alter_likelihood(ibd_list, ibd_isCensored, C):
 
     for d in range(4, D+1):
         for a in range(1,3):
-            if a == 1 and d == 1:
-                continue
             mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
             for n_p in range(0, num_ibd):
                 #in theory, we should also calculate the value when n_p = len(ibd_list). But that is the same as the null model. So no need to repeat that calculation. 
@@ -1103,8 +1108,8 @@ def alter_likelihood(ibd_list, ibd_isCensored, C):
                 exp_pop_censored = -(ibd_list[:n_p] - C)/theta
                 exp_ancestry_unCensored = -num_meiosis*(ibd_list[n_p:] - C)/100 - np.log(100/num_meiosis)
                 exp_ancestry_censored = -num_meiosis*(ibd_list[n_p:] - C)/100
-                exp_part_pop = np.sum(exp_pop_censored*ibd_isCensored) + np.sum(exp_pop_unCensored*(~ibd_isCensored))
-                exp_part_ancestry = np.sum(exp_ancestry_censored*ibd_isCensored) + np.sum(exp_ancestry_unCensored*(~ibd_isCensored))
+                exp_part_pop = np.sum(exp_pop_censored*ibd_isCensored[:n_p]) + np.sum(exp_pop_unCensored*(~ibd_isCensored[:n_p]))
+                exp_part_ancestry = np.sum(exp_ancestry_censored*ibd_isCensored[n_p:]) + np.sum(exp_ancestry_unCensored*(~ibd_isCensored[n_p:]))
 
                 results[d, a, n_p] = pois_part_pop + pois_part_ancestry + exp_part_pop + exp_part_ancestry
 
@@ -1231,11 +1236,11 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    print(f'{ind1}\t{ind2}', flush=True)
-                    print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
-                    print(f'num of IBD: {len(ibd_list)}', flush=True)
-                    print(ibd_list, flush=True)
-                    print(ibd_isCensored, flush=True)
+                    #print(f'{ind1}\t{ind2}', flush=True)
+                    #print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
+                    #print(f'num of IBD: {len(ibd_list)}', flush=True)
+                    #print(ibd_list, flush=True)
+                    #print(ibd_isCensored, flush=True)
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
