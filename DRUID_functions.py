@@ -1084,6 +1084,37 @@ def null_likelihood(ibd_list, ibd_isCensored, C):
     #exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
     return pois_part + exp_part
 
+
+def alter_likelihood_fast(ibd_list, ibd_isCensored, C):
+    D = 10 #any relationship more distant than 10 will be considered "unrelated"
+    num_ibd = len(ibd_list)
+    theta = mean_ibd_amount / mean_seg_num - C 
+    results = np.full((D+1, 3, num_ibd+1), -np.inf)
+
+    n_p = np.arange(0, num_ibd+1)
+    log_pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
+    log_censored = (-(ibd_list - C)/theta)*(ibd_isCensored)
+    log_unCensored = (-(ibd_list - C)/theta - np.log(theta))*(~ibd_isCensored)
+    log_exp_part_pop = np.insert(np.cumsum(log_censored) + np.cumsum(log_unCensored), 0, 0)
+    log_pop = log_pois_part_pop + log_exp_part_pop
+
+    for d in range(4, D+1):
+        for a in range(1,3):
+            mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
+            num_meiosis = d if a == 1 else d+1
+            log_pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
+            log_ancestry_unCensored = (-num_meiosis*(ibd_list - C)/100 - np.log(100/num_meiosis))*(~ibd_isCensored)[::-1]
+            log_ancestry_censored = (-num_meiosis*(ibd_list - C)/100)*(ibd_isCensored)[::-1]
+            log_exp_part_ancestry = np.insert((np.cumsum(log_ancestry_censored) + np.cumsum(log_ancestry_unCensored))[::-1], num_ibd, 0)
+            log_ancestry = log_pois_part_ancestry + log_exp_part_ancestry
+            results[d, a, :] = log_ancestry + log_pop
+
+    dim1, dim2, dim3 = np.where(results == np.max(results))
+    d, a, n_p = dim1[0], dim2[0], dim3[0]
+    return results[d, a, n_p], d, a, n_p
+
+
+
 def alter_likelihood(ibd_list, ibd_isCensored, C):
     D = 10 #any relationship more distant than 10 will be considered "unrelated"
     num_ibd = len(ibd_list)
@@ -1195,17 +1226,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
                     results.append(Pair(ind1, ind2, p_value, d))
-                    #print(f'{ind1}, {ind2}')
-                    #print(f'number of ibd segments: {len(ibd_list)}')
-                    #print(ibd_list)
-                    #print(f'null likelihood: {null_lik}')
-                    #print(f'alternative likelihood: {alter_lik}')
-                    #print(f'degree estimated from K: {all_rel[ind1][ind2][3]}', flush=True)
-                    #if p_value < 0.05/total_num_comparison:
-                    #    degree = d
-                    #else:
-                    #    degree = -1
-                    #print(f'degree estimated from ERSA-like approach: {degree}, a={a}, n_p={n_p}', flush=True)
+                  
     total_num_comparison = len(results)
     print(f'total number of comparison for bonf: {total_num_comparison}')
     for pair in results:
@@ -1219,7 +1240,8 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
     for ind1 in all_rel:
         for ind2 in all_rel[ind1]:
-            if not all_rel[ind1][ind2][3] in [1,2,3]:
+            degree_from_K = all_rel[ind1][ind2][3]
+            if  degree_from_K > 3: #individuals considered unrelated by kinship coefficient are labelled as -1, so this is fine
                 if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
                     ibd_list = []
                     ibd_isCensored = []
@@ -1232,8 +1254,8 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
                     ibd_list, ibd_isCensored = np.array(ibd_list), np.array(ibd_isCensored)
 
                     null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
-                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, ibd_isCensored, C)
-                    alter_lik = max(alter_lik, null_lik)
+                    alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, ibd_isCensored, C)
+                    #alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
                     #print(f'{ind1}\t{ind2}', flush=True)
