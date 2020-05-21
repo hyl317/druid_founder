@@ -1097,20 +1097,23 @@ def alter_likelihood_fast(ibd_list, ibd_isCensored, C):
     log_unCensored = (-(ibd_list - C)/theta - np.log(theta))*(~ibd_isCensored)
     log_exp_part_pop = np.insert(np.cumsum(log_censored) + np.cumsum(log_unCensored), 0, 0)
     log_pop = log_pois_part_pop + log_exp_part_pop
-
+    
+    ibd_list_reversed = ibd_list[::-1]
+    ibd_isCensored_reversed = ibd_isCensored[::-1]
     for d in range(4, D+1):
         for a in range(1,3):
             mean_seg_num_ancestry = MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, d]
             num_meiosis = d if a == 1 else d+1
             log_pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
-            log_ancestry_unCensored = (-num_meiosis*(ibd_list - C)/100 - np.log(100/num_meiosis))*(~ibd_isCensored)[::-1]
-            log_ancestry_censored = (-num_meiosis*(ibd_list - C)/100)*(ibd_isCensored)[::-1]
+            log_ancestry_unCensored = (-num_meiosis*(ibd_list_reversed - C)/100 - np.log(100/num_meiosis))*(~ibd_isCensored_reversed)
+            log_ancestry_censored = (-num_meiosis*(ibd_list_reversed - C)/100)*(ibd_isCensored_reversed)
             log_exp_part_ancestry = np.insert((np.cumsum(log_ancestry_censored) + np.cumsum(log_ancestry_unCensored))[::-1], num_ibd, 0)
             log_ancestry = log_pois_part_ancestry + log_exp_part_ancestry
             results[d, a, :] = log_ancestry + log_pop
 
     dim1, dim2, dim3 = np.where(results == np.max(results))
     d, a, n_p = dim1[0], dim2[0], dim3[0]
+    #print(results, flush=True)
     return results[d, a, n_p], d, a, n_p
 
 
@@ -1146,6 +1149,7 @@ def alter_likelihood(ibd_list, ibd_isCensored, C):
 
     dim1, dim2, dim3 = np.where(results == np.max(results))
     d, a, n_p = dim1[0], dim2[0], dim3[0]
+    #print(results, flush=True)
     return results[d, a, n_p], d, a, n_p
 
 def getAllRel(results_file, inds_file):
