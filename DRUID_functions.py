@@ -1138,17 +1138,18 @@ def alter_likelihood_fast(ibd_list, ibd_isCensored, C):
         deg = np.arange(d, D+1)
         num_meiosis = deg if a == 1 else deg + 1
         num_meiosis = num_meiosis[:,np.newaxis]
-        log_pois_part_ancestry = scipy.stats.poisson.logpmf(num_ibd - n_p, mean_seg_num_ancestry)
-
+        log_pois_part_ancestry = np.zeros((len(deg), num_ibd+1))
+        for i in range(d, D+1):
+            log_pois_part_ancestry[i-d,:] = scipy.stats.poisson.logpmf(num_ibd - n_p, MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, i])
+        
         log_ancestry_unCensored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100 - np.log(100/num_meiosis))*(~ibd_isCensored_reversed)
-        log_ancestry_censored = (num_meiosis*(C - ibd_list_reversed)/100)*(ibd_isCensored_reversed)
-        log_exp_part_ancestry = np.append(np.flip(np.cumsum, 1, np.apply_along_axis()+np.apply_along_axis()), np.zeros((len(deg), 1)), axis=1)
-        log_ancestry = log_pois_part_ancestry + llog_exp_part_ancestry
+        log_ancestry_censored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100)*ibd_isCensored_reversed
+        log_exp_part_ancestry = np.append(np.flip(np.apply_along_axis(np.cumsum, 1, log_ancestry_unCensored)+np.apply_along_axis(np.cumsum, 1, log_ancestry_censored),axis=1), np.zeros((len(deg), 1)),axis=1)
+        log_ancestry = log_pois_part_ancestry + log_exp_part_ancestry
         results[a, d:D+1, :] = log_ancestry + log_pop
 
     dim1, dim2, dim3 = np.where(results == np.max(results))
     a, d, n_p = dim1[0], dim2[0], dim3[0]
-    #print(results, flush=True)
     return results[a, d, n_p], d, a, n_p
 
 
