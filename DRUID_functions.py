@@ -829,9 +829,9 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     #    print(f'{sib1}, {avunc1}')
     #    print(f'{sib2},{avunc2}')
 
-    print(f'num_R1\t{sib1_len+av1_len}\tnum_R2\t{sib2_len+av2_len}')
-    print(f'total IBD before correction: {tmp}')
-    print(f'total IBD after correction: {tmpsibav}')
+    #print(f'num_R1\t{sib1_len+av1_len}\tnum_R2\t{sib2_len+av2_len}')
+    #print(f'total IBD before correction: {tmp}')
+    #print(f'total IBD after correction: {tmpsibav}')
     #MY MODIFICATION ENDS HERE
 
 
@@ -1849,6 +1849,9 @@ def readNe(NeFile):
     with open(NeFile) as Ne:
         line = Ne.readline()
         while line:
+            if line.startswith('#'):
+                line = Ne.readline()
+                continue
             g, ne = line.strip().split('\t')
             N.append(float(ne))
             line = Ne.readline()
