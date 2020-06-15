@@ -3,6 +3,7 @@ import networkx as nx
 import copy
 import gzip
 import numpy as np
+from collections import defaultdict
 from scipy.integrate import quad
 from scipy.special import logsumexp
 from numba import jit
@@ -12,6 +13,7 @@ from operator import attrgetter
 from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 from constant import *
+import ibd
 
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
 
@@ -178,7 +180,92 @@ def readHapIBD(file_for_hapibd):
     return hapibd_segs, hapibd_isCensored
 
 
+def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
+    hapibd_segs = {}
+    hapibd_isCensored = {}
+    pairs = {}
+
+    with gzip.open(file_for_hapibd, 'rt') as file:
+        line = file.readline()
+        while line:
+            ind1, _, ind2, _, chr, start_bp, end_bp, len = line.strip().split('\t')
+            ids = (min(ind1, ind2), max(ind1, ind2))
+            start_bp, end_bp, len = int(start_bp), int(end_bp), float(len)
+
+            if (ids[0], ids[1]) not in pairs:
+                pairs[(ids[0], ids[1])] = ibd.pair(ids[0], ids[1], chrom_names, total_genome)
+            pairs[(ids[0], ids[1])].addIBDSeg(ibd.ibdSeg(start_bp, end_bp, snp_map[chr][start_bp], snp_map[chr][end_bp], chr, len))
+            
+            if not ids[0] in hapibd_segs:
+                hapibd_segs[ ids[0] ] = \
+                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
+                hapibd_isCensored[ ids[0] ] = \
+                    { ids[1]: { chr : [] for chr in range(num_chrs) } }
+            elif not ids[1] in hapibd_segs[ ids[0] ]:
+                hapibd_segs[ ids[0] ][ ids[1] ] = \
+                                { chr : [] for chr in range(num_chrs) }
+                hapibd_isCensored[ ids[0] ][ ids[1] ] = \
+                                { chr : [] for chr in range(num_chrs) }
+
+            hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(len)
+            isCensored = start_bp == chrom_starts_bp[chrom_name_to_idx[chr]] or end_bp == chrom_ends_bp[chrom_name_to_idx[chr]]
+            hapibd_isCensored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
+
+            line = file.readline()
+    print('finished reading hapibd file', flush=True)
+    global inds
+    first = [] #list of first degree relative pairs according to Refined IBD results
+    second = [] #list of second degree relative pairs according to Refined IBD results
+    third = [] #list of third degree relative pairs according to Refined IBD results
+    inds = set()
+    if inds_file != '':
+        file = open(inds_file,'r')
+        for line in file:
+            l = str.split(line.rstrip())
+            if len(l):
+                inds.add(l[0])
+        file.close()
+
+    all_segs = {}
+    all_rel = defaultdict(lambda: {})
+    for pair, pair_obj in pairs.items():
+        ind1, ind2 = pair
+        if inds_file == '':
+            inds.add(ind1)
+            inds.add(ind2)
+        if ind1 in inds and ind2 in inds:
+            ibd1, ibd2 = pair_obj.getIBD12()
+            ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome)
+            K = ibd1/4.0 + ibd2/2.0
+            degree = getInferredFromK(K)
+            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+            if degree == 1:
+                first.append([ind1,ind2])
+            elif degree == 2:
+                second.append([ind1,ind2])
+            elif degree == 3:
+                third.append([ind1, ind2])
+        else:
+            continue
+
+        if not ind1 in all_segs:
+            all_segs[ ind1 ] = \
+                    { ind2: [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ] }
+        elif not ind2 in all_segs[ ind1 ]:
+            all_segs[ ind1 ][ ind2 ] = \
+                            [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
+
+        for chrom_name, interval_Tree in pair_obj.ibdList.items():
+            chr = chrom_name_to_idx[chrom_name]
+            for interval in interval_Tree.items():    
+                ibdSeg = interval[2]
+                IBD_status = 1 if ibdSeg.isIBD2 else 0
+                start_cM, end_cM = ibdSeg.start_cM, ibdSeg.end_cM
+                all_segs[ind1][ind2][IBD_status][chr].append([start_cM, end_cM])
+
+    return hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third
 #MY MODIFICATION ENDS
+
 
 def readSegments(file_for_segments):
     all_segs = {}
@@ -315,6 +402,7 @@ def getChrInfo(mapfile):
     chrom_starts_bp = []
     chrom_ends_bp = []
     num_chrs = 0
+    snp_map = defaultdict(lambda : {})
 
     file = open(mapfile,'r')
     for line in file:
@@ -333,6 +421,8 @@ def getChrInfo(mapfile):
 
         pos = float(l[2])
         bp = int(l[3])
+        snp_map[chr_name][bp] = pos
+
         if chrom_starts[chr] > pos:
             chrom_starts[chr] = pos
             chrom_starts_bp[chr] = bp
@@ -346,7 +436,7 @@ def getChrInfo(mapfile):
     for chr in range(num_chrs):
         total_genome += chrom_ends[chr] - chrom_starts[chr]
 
-    return [total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs]
+    return [total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs, snp_map]
 
 
 def getInferredFromK(K):
@@ -787,7 +877,7 @@ def getExpectedPar(num_sibs):
     return (1.0-1.0/2.0**num_sibs)
 
 
-def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2, pc2, all_rel, all_segs, results_file, rel_graph):
+def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2, pc2, all_rel, all_segs, rel_graph):
 # perform ancestral genome reconstruction between two groups of related individuals (sib1+avunc1 and sib2+avunc2)
 # infers relatedness between all individuals within the two groups
     # TODO! use any neice/nephews of sib1, sib2 as well
@@ -1649,7 +1739,7 @@ def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile):
                 graphCase = True
             else:
                 # DO THE INFERENCE
-                results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, pc2, all_rel, all_segs, args.i[0], rel_graph)
+                results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, pc2, all_rel, all_segs, rel_graph)
                 for resu in results_tmp:
                     this_pair = getPairName(resu[0], resu[1])
                     if not this_pair in checked:

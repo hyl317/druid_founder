@@ -4,6 +4,7 @@ import networkx as nx
 from DRUID_functions import *
 from DRUID_graph_interaction import *
 import argparse
+import sys
 
 version='v1.02.6'
 update='16 Apr 2019'
@@ -19,8 +20,8 @@ parser=argparse.ArgumentParser(
      With flag -F, can also output PLINK format .fam files containing first and second degree relationships types which were inferred/provided, outputting multiple .fam files in cases when a parent-child pair is found, but there is not
      enough information to determine who is the parent and who is the child""")
 parser.add_argument('-o', type=str, nargs=1, default=['out'], help='Output file prefix', metavar='out')
-parser.add_argument('-i', type=str, nargs=1, required=True, help='Pairwise IBD1 & IBD2 proportions file', metavar='file.ibd12')
-parser.add_argument('-s', type=str, nargs=1, required=True, help='Pairwise IBD segments file', metavar='file.seg')
+#parser.add_argument('-i', type=str, nargs=1, required=True, help='Pairwise IBD1 & IBD2 proportions file', metavar='file.ibd12')
+#parser.add_argument('-s', type=str, nargs=1, required=True, help='Pairwise IBD segments file', metavar='file.seg')
 parser.add_argument('-m', type=str, nargs=1, required=True, help='Map file (PLINK format), non-zero cM column required', metavar='file.map')
 parser.add_argument('-f', type=str, nargs=1, default=[''], help="Known first (FS/P/C) and second degree relationships (AU/NN/GP/GC/HS), columns: ind1/ind2/ind1's relation to ind2",metavar='file.faminfo')
 parser.add_argument('-u', type=str, nargs=1, default=[''], help='File containing individuals to include', metavar='file.inds')
@@ -38,7 +39,7 @@ inds = []
 print("DRUID " + version + " -- A multiway relatedness estimator.")
 print("Last update " + update + "\n")
 
-print("Using IBD12 file: "+args.i[0])
+#print("Using IBD12 file: "+args.i[0])
 print("Using map file: "+args.m[0])
 print("Using output prefix: "+args.o[0])
 if args.f[0] != '':
@@ -52,7 +53,7 @@ else:
 
 # Get map info
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs
-[total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs] = getChrInfo(args.m[0])
+[total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs, snp_map] = getChrInfo(args.m[0])
 print("Genome length: " + str(total_genome)+'\n')
 
 global founder, mean_seg_num, mean_ibd_amount
@@ -67,17 +68,19 @@ if founder:
     print(f'mean total IBD sharing amount: {mean_ibd_amount}')
     print(f'use Kinship coefficient? {args.useK}')
 
-# Get IBD1/2 info
-all_segs = readSegments(args.s[0])
-hapibd_segs, hapibd_isCensored = readHapIBD(args.hapibd)
-[all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
+# Get IBD1/2 info: should be able to the following three functions all in one go
+hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third = \
+    readHapIBD2(args.hapibd, snp_map, chrom_name_to_idx.keys(), args.u[0])
+
+#all_segs = readSegments(args.s[0])
+#hapibd_segs, hapibd_isCensored = readHapIBD(args.hapibd)
+#[all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
 print("Total number of individuals: " + str(len(inds)))
 
 total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)
 if not args.useK:
     if args.FDR:
         ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, args.minIBD)
-        #ersa_FDR_all(all_rel, hapibd_segs, args.minIBD)
     else:
         ersa_bonferroni(all_rel, hapibd_segs, args.minIBD)
 
