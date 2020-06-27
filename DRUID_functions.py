@@ -1181,7 +1181,6 @@ def null_likelihood(ibd_list, ibd_isCensored, C):
     exp_unCensored = -(ibd_list - C)/theta - np.log(theta)
     exp_Censored = C/theta - ibd_list/theta
     exp_part = np.sum(exp_Censored*ibd_isCensored) + np.sum(exp_unCensored*(~ibd_isCensored))
-    #exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
     return pois_part + exp_part
 
 # def alter_likelihood(ibd_list, ibd_isCensored, C):
@@ -1341,33 +1340,12 @@ def getAllRel(results_file, inds_file):
     file.close()
     return [all_rel,inds,first,second,third]
 
-def ersa_bonferroni(all_rel, hapibd_segs, C):
-    results = []
-    Pair = namedtuple('Pair', 'ind1 ind2 p d')
-    for ind1 in all_rel:
-        for ind2 in all_rel[ind1]:
-            if all_rel[ind1][ind2][3] in [1,2,3]:
-                print('close relatives')
-                continue
-            else:
-                if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
-                    ibd_list = []
-                    for chr in range(num_chrs):
-                        ibd_list.extend(hapibd_segs[ind1][ind2][chr])
-
-                    ibd_list.sort()
-                    ibd_list = np.array(ibd_list)
-                    null_lik = null_likelihood(ibd_list, C)
-                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
-                    alter_lik = max(alter_lik, null_lik)
-                    chi2 = -2*(null_lik - alter_lik)
-                    p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    results.append(Pair(ind1, ind2, p_value, d))
-                  
+def ersa_bonferroni(all_rel, hapibd_segs, hapibd_isCensored, C, alpha=0.05):
+    results = ersa(all_rel, hapibd_segs, hapibd_isCensored, C)
     total_num_comparison = len(results)
     print(f'total number of comparison for bonf: {total_num_comparison}')
     for pair in results:
-        if pair.p < 0.05/total_num_comparison:
+        if pair.p < alpha/total_num_comparison:
             all_rel[pair.ind1][pair.ind2][3] = pair.d
         else:
             all_rel[pair.ind1][pair.ind2][3] = -1
@@ -1382,24 +1360,36 @@ def LRT(ibd_list, ibd_isCensored, C):
     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
     return (p_value, d)
 
-def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
+def ersa(all_rel, hapibd_segs, hapibd_isCensored, C):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
-    TODO_map = {}
-    for ind1 in all_rel:
-        for ind2 in all_rel[ind1]:
-            degree_from_K = all_rel[ind1][ind2][3]
-            if  degree_from_K > 3: #individuals considered unrelated by kinship coefficient are labelled as -1, so this is fine
-                if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
+    with futures.ProcessPoolExecutor() as executor:
+        TODO_map = {}
+        for ind1 in all_rel:
+            for ind2 in all_rel[ind1]:
+                degree_from_K = all_rel[ind1][ind2][3]
+                #individuals considered unrelated by kinship coefficient are labelled as -1, so this is fine
+                if  degree_from_K > 3 and ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
                     ibd_list = []
                     ibd_isCensored = []
                     for chr in range(num_chrs):
                         ibd_list.extend(hapibd_segs[ind1][ind2][chr])
                         ibd_isCensored.extend(hapibd_isCensored[ind1][ind2][chr])
 
-                    p_value, d = LRT(ibd_list, ibd_isCensored, C)
-                    results.append(Pair(ind1, ind2, p_value, d))
+                    future = executor.submit(LRT, ibd_list, ibd_isCensored, C)
+                    TODO_map[future] = (ind1, ind2)
+        done_iter = futures.as_completed(TODO_map)
+        for future in done_iter:
+            try:
+                p_value, d = future.result()
+            except Exception as e:
+                print(e)
+            ind1, ind2 = TODO_map[future]
+            results.append(Pair(ind1, ind2, p_value, d))
+    return results
 
+def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
+    results = ersa(all_rel, hapibd_segs, hapibd_isCensored, C)
     results.sort(key=attrgetter('p'))
     p_sort = np.array([pair.p for pair in results])
     q_val = len(results)*p_sort/np.arange(1, len(results)+1)
@@ -1407,37 +1397,6 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
     p_cut = np.max(p_sort[np.where(q_val <= fdr)])
     for pair in results:
         all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
-
-#def ersa_FDR_all(all_rel, hapibd_segs, C, fdr=0.05):
-#    results = []
-#    Pair = namedtuple('Pair', 'ind1 ind2 p d')
-#    for ind1 in all_rel:
-#        for ind2 in all_rel[ind1]:
-#            if ind1 in hapibd_segs and ind2 in hapibd_segs[ind1]:
-#                ibd_list = []
-#                for chr in range(num_chrs):
-#                    ibd_list.extend(hapibd_segs[ind1][ind2][chr])
-
-#                ibd_list.sort()
-#                ibd_list = np.array(ibd_list)
-#                null_lik = null_likelihood(ibd_list, C)
-#                alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
-#                alter_lik = max(alter_lik, null_lik)
-#                chi2 = -2*(null_lik - alter_lik)
-#                p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-#                print(f'{ind1}\t{ind2}\t{d}\t{a}', flush=True)
-#                print(f'num of IBD: {len(ibd_list)}', flush=True)
-#                print(ibd_list, flush=True)
-#                results.append(Pair(ind1, ind2, p_value, d))
-
-#    results.sort(key=attrgetter('p'))
-#    p_sort = np.array([pair.p for pair in results])
-#    q_val = len(results)*p_sort/np.arange(1, len(results)+1)
-#    p_cut = np.max(p_sort[np.where(q_val <= fdr)])
-#    for pair in results:
-#        all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
-
-
 
 def getSecondDegreeRelatives(rel_graph, second, sibset, par, all_rel):
     # collect all individuals we should check for being aunts/uncles of the sibset

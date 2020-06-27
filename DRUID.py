@@ -5,6 +5,7 @@ from DRUID_functions import *
 from DRUID_graph_interaction import *
 import argparse
 import sys
+import os
 
 version='v1.02.6'
 update='16 Apr 2019'
@@ -32,6 +33,7 @@ parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="mini
 parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file. gzipped')
 parser.add_argument('--FDR', action='store_true')
 parser.add_argument('--useK', action="store_true")
+parser.add_argument('--alpha', action="store", type=float, default=0.05, help="alpha for bonferroni correction or false discovery rate for FDR. Default to 0.05.")
 args=parser.parse_args()
 
 inds = []
@@ -80,9 +82,9 @@ print("Total number of individuals: " + str(len(inds)))
 total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)
 if not args.useK:
     if args.FDR:
-        ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, args.minIBD)
+        ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, args.minIBD, args.alpha)
     else:
-        ersa_bonferroni(all_rel, hapibd_segs, args.minIBD)
+        ersa_bonferroni(all_rel, hapibd_segs, hapibd_isCensored, args.minIBD, args.alpha)
 
 #make graph
 rel_graph = nx.DiGraph()
