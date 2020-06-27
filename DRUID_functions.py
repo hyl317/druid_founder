@@ -188,13 +188,13 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
     with gzip.open(file_for_hapibd, 'rt') as file:
         line = file.readline()
         while line:
-            ind1, _, ind2, _, chr, start_bp, end_bp, len = line.strip().split('\t')
+            ind1, _, ind2, _, chr, start_bp, end_bp, length = line.strip().split('\t')
             ids = (min(ind1, ind2), max(ind1, ind2))
-            start_bp, end_bp, len = int(start_bp), int(end_bp), float(len)
+            start_bp, end_bp, length = int(start_bp), int(end_bp), float(length)
 
             if (ids[0], ids[1]) not in pairs:
                 pairs[(ids[0], ids[1])] = ibd.pair(ids[0], ids[1], chrom_names, total_genome)
-            pairs[(ids[0], ids[1])].addIBDSeg(ibd.ibdSeg(start_bp, end_bp, snp_map[chr][start_bp], snp_map[chr][end_bp], chr, len))
+            pairs[(ids[0], ids[1])].addIBDSeg(ibd.ibdSeg(start_bp, end_bp, snp_map[chr][start_bp], snp_map[chr][end_bp], chr, length))
             
             if not ids[0] in hapibd_segs:
                 hapibd_segs[ ids[0] ] = \
@@ -207,7 +207,7 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
                 hapibd_isCensored[ ids[0] ][ ids[1] ] = \
                                 { chr : [] for chr in range(num_chrs) }
 
-            hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(len)
+            hapibd_segs[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(length)
             isCensored = start_bp == chrom_starts_bp[chrom_name_to_idx[chr]] or end_bp == chrom_ends_bp[chrom_name_to_idx[chr]]
             hapibd_isCensored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
 
@@ -233,8 +233,43 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
         if inds_file == '':
             inds.add(ind1)
             inds.add(ind2)
+        # if ind1 in inds and ind2 in inds:
+        #     ibd1, ibd2 = pair_obj.getIBD12()
+        #     ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome)
+        #     K = ibd1/4.0 + ibd2/2.0
+        #     degree = getInferredFromK(K)
+        #     all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+        #     if degree == 1:
+        #         first.append([ind1,ind2])
+        #     elif degree == 2:
+        #         second.append([ind1,ind2])
+        #     elif degree == 3:
+        #         third.append([ind1, ind2])
+        # else:
+        #     continue
         if ind1 in inds and ind2 in inds:
-            ibd1, ibd2 = pair_obj.getIBD12()
+            if not ind1 in all_segs:
+                all_segs[ ind1 ] = \
+                    { ind2: [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ] }
+            elif not ind2 in all_segs[ ind1 ]:
+                all_segs[ ind1 ][ ind2 ] = \
+                            [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
+
+            ibd1 = ibd2 = 0
+            for chrom_name, interval_Tree in pair_obj.ibdList.items():
+                chr = chrom_name_to_idx[chrom_name]
+                for interval in interval_Tree.items():    
+                    ibdSeg = interval[2]
+                    IBD_status = 1 if ibdSeg.isIBD2 else 0
+                    start_cM, end_cM = ibdSeg.start_cM, ibdSeg.end_cM
+                    all_segs[ind1][ind2][IBD_status][chr].append([start_cM, end_cM])
+                    if IBD_status:
+                        ibd2 += ibdSeg.length
+                    else:
+                        ibd1 += ibdSeg.length
+
+            ibd1 /= total_genome
+            ibd2 /= total_genome
             ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome)
             K = ibd1/4.0 + ibd2/2.0
             degree = getInferredFromK(K)
@@ -248,20 +283,6 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
         else:
             continue
 
-        if not ind1 in all_segs:
-            all_segs[ ind1 ] = \
-                    { ind2: [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ] }
-        elif not ind2 in all_segs[ ind1 ]:
-            all_segs[ ind1 ][ ind2 ] = \
-                            [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
-
-        for chrom_name, interval_Tree in pair_obj.ibdList.items():
-            chr = chrom_name_to_idx[chrom_name]
-            for interval in interval_Tree.items():    
-                ibdSeg = interval[2]
-                IBD_status = 1 if ibdSeg.isIBD2 else 0
-                start_cM, end_cM = ibdSeg.start_cM, ibdSeg.end_cM
-                all_segs[ind1][ind2][IBD_status][chr].append([start_cM, end_cM])
 
     return hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third
 #MY MODIFICATION ENDS
@@ -1174,7 +1195,7 @@ def null_likelihood(ibd_list, ibd_isCensored, C):
     #exp_part = np.sum(-(ibd_list - C)/theta - np.log(theta))
     return pois_part + exp_part
 
-
+@jit(nopython=True, parallel=True)
 def alter_likelihood(ibd_list, ibd_isCensored, C):
     D = 10 #any relationship more distant than 10 will be considered "unrelated"
     num_ibd = len(ibd_list)
@@ -1230,7 +1251,8 @@ def alter_likelihood_fast(ibd_list, ibd_isCensored, C):
         num_meiosis = num_meiosis[:,np.newaxis]
         log_pois_part_ancestry = np.zeros((len(deg), num_ibd+1))
         for i in range(d, D+1):
-            log_pois_part_ancestry[i-d,:] = scipy.stats.poisson.logpmf(num_ibd - n_p, MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, i])
+            log_pois_part_ancestry[i-d,:] = scipy.stats.poisson.logpmf(num_ibd - n_p, \
+                MEAN_SEG_NUM_ANCESTRY_LOOKUP[a, i]*np.exp(-C*num_meiosis[i-d]/100))
         
         log_ancestry_unCensored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100 - np.log(100/num_meiosis))*(~ibd_isCensored_reversed)
         log_ancestry_censored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100)*ibd_isCensored_reversed
@@ -1350,7 +1372,7 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
                     ibd_list.sort()
                     ibd_list = np.array(ibd_list)
                     null_lik = null_likelihood(ibd_list, C)
-                    alter_lik, d, a, n_p = alter_likelihood(ibd_list, C)
+                    alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, C)
                     alter_lik = max(alter_lik, null_lik)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
@@ -1386,16 +1408,17 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
                     alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, ibd_isCensored, C)
                     chi2 = -2*(null_lik - alter_lik)
                     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
-                    #print(f'{ind1}\t{ind2}', flush=True)
-                    #print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
-                    #print(f'num of IBD: {len(ibd_list)}', flush=True)
-                    #print(ibd_list, flush=True)
-                    #print(ibd_isCensored, flush=True)
+                    # print(f'{ind1}\t{ind2}', flush=True)
+                    # print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
+                    # print(f'num of IBD: {len(ibd_list)}', flush=True)
+                    # print(ibd_list, flush=True)
+                    # print(ibd_isCensored, flush=True)
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))
     p_sort = np.array([pair.p for pair in results])
     q_val = len(results)*p_sort/np.arange(1, len(results)+1)
+    print(p_sort)
     p_cut = np.max(p_sort[np.where(q_val <= fdr)])
     for pair in results:
         all_rel[pair.ind1][pair.ind2][3] = pair.d if pair.p <= p_cut else -1
