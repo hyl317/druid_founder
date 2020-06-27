@@ -3,6 +3,7 @@ import networkx as nx
 import copy
 import gzip
 import numpy as np
+import time
 from collections import defaultdict
 from scipy.integrate import quad
 from scipy.special import logsumexp
@@ -185,6 +186,7 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
     hapibd_isCensored = {}
     pairs = {}
 
+    start = time.time()
     with gzip.open(file_for_hapibd, 'rt') as file:
         line = file.readline()
         while line:
@@ -212,7 +214,7 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
             hapibd_isCensored[ids[0]][ids[1]][chrom_name_to_idx[chr]].append(isCensored)
 
             line = file.readline()
-    print('finished reading hapibd file', flush=True)
+    print(f'finished reading hapibd file, takes {time.time()-start}', flush=True)
     global inds
     first = [] #list of first degree relative pairs according to Refined IBD results
     second = [] #list of second degree relative pairs according to Refined IBD results
@@ -1386,6 +1388,13 @@ def ersa_bonferroni(all_rel, hapibd_segs, C):
         else:
             all_rel[pair.ind1][pair.ind2][3] = -1
 
+def LRT(ibd_list, ibd_isCensored, C):
+    null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
+    alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, ibd_isCensored, C)
+    chi2 = -2*(null_lik - alter_lik)
+    p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+    return (p_value, d)
+
 def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
     results = []
     Pair = namedtuple('Pair', 'ind1 ind2 p d')
@@ -1404,15 +1413,16 @@ def ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, C, fdr=0.05):
                     ibd_list, ibd_isCensored = zip(*tmp)
                     ibd_list, ibd_isCensored = np.array(ibd_list), np.array(ibd_isCensored)
 
-                    null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
-                    alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, ibd_isCensored, C)
-                    chi2 = -2*(null_lik - alter_lik)
-                    p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
+                    # null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
+                    # alter_lik, d, a, n_p = alter_likelihood_fast(ibd_list, ibd_isCensored, C)
+                    # chi2 = -2*(null_lik - alter_lik)
+                    # p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
                     # print(f'{ind1}\t{ind2}', flush=True)
                     # print(f'd={d}, a={a}, n_p={n_p}, p_value={p_value}', flush=True)
                     # print(f'num of IBD: {len(ibd_list)}', flush=True)
                     # print(ibd_list, flush=True)
                     # print(ibd_isCensored, flush=True)
+                    p_value, d = LRT(ibd_list, ibd_isCensored, C)
                     results.append(Pair(ind1, ind2, p_value, d))
 
     results.sort(key=attrgetter('p'))

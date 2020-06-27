@@ -156,16 +156,16 @@ class pair(object):
 
     #     return 0.25*(ibd1/self.total_genome) + 0.5*(ibd2/self.total_genome)
 
-    def getIBD12(self):
-        ibd1 = 0
-        ibd2 = 0
-        for chr, interval_Tree in self.ibdList.items():
-            for interval in interval_Tree.items():
-                if interval[2].isIBD2:
-                    ibd2 += interval[2].length
-                else:
-                    ibd1 += interval[2].length
-        return ibd1/self.total_genome, ibd2/self.total_genome
+    # def getIBD12(self):
+    #     ibd1 = 0
+    #     ibd2 = 0
+    #     for chr, interval_Tree in self.ibdList.items():
+    #         for interval in interval_Tree.items():
+    #             if interval[2].isIBD2:
+    #                 ibd2 += interval[2].length
+    #             else:
+    #                 ibd1 += interval[2].length
+    #     return ibd1/self.total_genome, ibd2/self.total_genome
 
 
 
