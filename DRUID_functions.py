@@ -1932,16 +1932,20 @@ def expectation_num_segment(N, u):
     mean_seg_num = 4*total_genome*(np.exp(log_term1)+np.exp(log_term2))
     return mean_seg_num
 
-def log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, maxgen, C, n_p):
-    def partb(g, n_g, maxgen, C, chromlen):
-        part3 = np.sum((C*g/50 + 1)*chromlen) - len(chromlen)*(C**2)*g/50
-        part2 = -C*g/50
-        part1 = (g-maxgen-1)*np.log(1-1/(2*n_g))
-        return np.exp(part1 + part2 + np.log(part3))
-    n_past = n[-1]
-    integral1, err1 = quad(partb, maxgen+1, np.inf, args=(n_past, maxgen, C, chr_len_cm))
-    integral2, err2 = quad(partb, maxgen, np.inf, args=(n_past, maxgen, C, chr_len_cm))
-    return np.log(n_p) - np.log(2*n_past) + np.sum(np.log(1-1/(2*n))) + np.log((integral1 + integral2)/2)
+def log_expectedibd_beyond_maxgen_given_ne(N, chr_len_cm, maxgen, C, n_p):
+    total_genome = np.sum(chr_len_cM)
+    num_chrs = len(chr_len_cM)
+    N_past = N[-1]
+    alpha = np.log(1-1/(2*N_past)) - C/50
+    log_part_A = np.log(total_genome) + (G+1)*np.log((2*N_past)/(2*N_past-1)) + \
+            alpha*(G+1) - np.log(1-np.exp(alpha))
+    D = (C/50)*total_genome - C**2*num_chrs/50
+    log_part_B = np.log(D) + (G+1)*np.log((2*N_past)/(2*N_past-1)) + alpha*(G+1) + \
+            np.log(1+G*(1-np.exp(alpha))) - 2*np.log(1-np.exp(alpha))
+
+    return np.log(n_p) + np.sum(np.log(1-1/(2*N))) - np.log(2*N_past) + np.logaddexp(log_part_A, log_part_B)
+
+
 
 def expectedibdsharing(n, chr_len_cm, C):
     global mean_ibd_amount
@@ -1950,7 +1954,7 @@ def expectedibdsharing(n, chr_len_cm, C):
     log_term3 = np.log(np.sum(C*(chr_len_cm[:,np.newaxis]@gen.reshape((1, g)))/50 + chr_len_cm[:,np.newaxis] - ((C**2)*gen)/50, axis=0))
     sum_log_prob_not_coalesce = np.cumsum(np.insert(np.log(1-1/(2*n)), 0, 0))[:-1]
     log_expectation = np.log(4) + sum_log_prob_not_coalesce - np.log(2*n) - C*gen/50 + log_term3
-    log_expectation = np.append(log_expectation, log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, g, C, 4)) #need to calculate expected amount of ibd coalescing beyond maxgen generations into the past
+    log_expectation = np.append(log_expectation, log_expectedibd_beyond_maxgen_given_ne(n, chr_len_cm, g, C, 4))
 
     mean_ibd_amount = np.sum(np.exp(log_expectation))
     return mean_ibd_amount
