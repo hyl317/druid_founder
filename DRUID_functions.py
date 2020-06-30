@@ -1932,7 +1932,7 @@ def expectation_num_segment(N, u):
     mean_seg_num = 4*total_genome*(np.exp(log_term1)+np.exp(log_term2))
     return mean_seg_num
 
-def log_expectedibd_beyond_maxgen_given_ne(N, chr_len_cm, maxgen, C, n_p):
+def log_expectedibd_beyond_maxgen_given_ne(N, chr_len_cM, G, C, n_p):
     total_genome = np.sum(chr_len_cM)
     num_chrs = len(chr_len_cM)
     N_past = N[-1]

@@ -44,7 +44,8 @@ class pair(object):
         self.total_genome = total_genome
 
     def addIBDSeg(self, ibd_seg):
-        chr, start_bp, end_bp, start_cM, end_cM = ibd_seg.chr, ibd_seg.start_bp, ibd_seg.end_bp, ibd_seg.start_cM, ibd_seg.end_cM
+        chr, start_bp, end_bp, start_cM, end_cM = ibd_seg.chr, ibd_seg.start_bp, \
+                    ibd_seg.end_bp, ibd_seg.start_cM, ibd_seg.end_cM
         t = self.ibdList[chr]
 
         overlaps = t[start_bp:end_bp]
