@@ -837,34 +837,24 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
                     all_seg_IBD2[chr] += tmp[1][chr]
 
     IBD_sum = 0
-
-    #MY MODIFICATION STARTS HERE
-    #Print out sum of IBD length before overlapping intervals are merged
-    ##wanna see whether total IBD sharing amount is proportional to number of pairs
-    #temp_ibd_sum = 0
-    #num_R1 = len(sib1) + len(avunc1)
-    #num_R2 = len(sib2) + len(avunc2)
-
-    #for chr in range(num_chrs):
-    #    for seg in all_seg_IBD1[chr]:
-    #        temp_ibd_sum += seg[1] - seg[0]
-    #    for seg in all_seg_IBD2[chr]:
-    #        temp_ibd_sum += 2*(seg[1] - seg[0])
-    #print(f'total IBD length {temp_ibd_sum} for {num_R1*num_R2} pairwise comparison')
-
-    #MY MODIFICATION ENDS HERE
-
-
     for chr in range(num_chrs):
         all_seg_IBD1[chr] = mergeIntervals(all_seg_IBD1[chr][:])
         for seg in all_seg_IBD1[chr]:
             IBD_sum += seg[1] - seg[0]
         all_seg_IBD2[chr] = mergeIntervals(all_seg_IBD2[chr][:])
         for seg in all_seg_IBD2[chr]:
-            IBD_sum += 2.0*(seg[1] - seg[0])
+            IBD_sum += 2*(seg[1] - seg[0])
 
-    #IBD_sum = max(0, IBD_sum - 62.1)
+    # All siblings IBD2 -> only half of the parental genome transmitted
+    # at least two sibs IBD0 -> all of the parental genome transmitted
+    # the rest? not sure, use 0.75 as an approximation
+
     return [IBD_sum, sum(has_seg_sib1), sum(has_seg_sib2), sum(has_seg_avunc1), sum(has_seg_avunc2)]
+
+#def mergeIntervals2(IBD1segs, IBD2segs, snp_map_chr):
+#    pos = sorted(snp_map_chr.values())
+#    indicators = 
+
 
 
 def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
