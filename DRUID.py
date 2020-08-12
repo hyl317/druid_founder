@@ -21,8 +21,8 @@ parser=argparse.ArgumentParser(
      With flag -F, can also output PLINK format .fam files containing first and second degree relationships types which were inferred/provided, outputting multiple .fam files in cases when a parent-child pair is found, but there is not
      enough information to determine who is the parent and who is the child""")
 parser.add_argument('-o', type=str, nargs=1, default=['out'], help='Output file prefix', metavar='out')
-#parser.add_argument('-i', type=str, nargs=1, required=True, help='Pairwise IBD1 & IBD2 proportions file', metavar='file.ibd12')
-#parser.add_argument('-s', type=str, nargs=1, required=True, help='Pairwise IBD segments file', metavar='file.seg')
+parser.add_argument('-i', type=str, nargs=1, required=True, help='Pairwise IBD1 & IBD2 proportions file', metavar='file.ibd12')
+parser.add_argument('-s', type=str, nargs=1, required=True, help='Pairwise IBD segments file', metavar='file.seg')
 parser.add_argument('-m', type=str, nargs=1, required=True, help='Map file (PLINK format), non-zero cM column required', metavar='file.map')
 parser.add_argument('-f', type=str, nargs=1, default=[''], help="Known first (FS/P/C) and second degree relationships (AU/NN/GP/GC/HS), columns: ind1/ind2/ind1's relation to ind2",metavar='file.faminfo')
 parser.add_argument('-u', type=str, nargs=1, default=[''], help='File containing individuals to include', metavar='file.inds')
@@ -33,6 +33,7 @@ parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="mini
 parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file. gzipped')
 parser.add_argument('--FDR', action='store_true')
 parser.add_argument('--useK', action="store_true")
+parser.add_argument('--accu', action="store_true")
 parser.add_argument('--alpha', action="store", type=float, default=0.05, help="alpha for bonferroni correction or false discovery rate for FDR. Default to 0.05.")
 args=parser.parse_args()
 
@@ -71,16 +72,23 @@ if founder:
     print(f'use Kinship coefficient? {args.useK}')
 
 # Get IBD1/2 info: should be able to the following three functions all in one go
-hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third = \
-    readHapIBD2(args.hapibd, snp_map, chrom_name_to_idx.keys(), args.u[0])
+hapibd_segs = None
+hapibd_isCensored = None
+if args.hapibd:
+    hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third = \
+            readHapIBD2(args.hapibd, snp_map, chrom_name_to_idx.keys(), args.u[0])
+else:
+    assert args.i != None
+    assert args.s != None
+    all_segs = readSegments(args.s[0])
+    [all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
 
-#all_segs = readSegments(args.s[0])
-#hapibd_segs, hapibd_isCensored = readHapIBD(args.hapibd)
-#[all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
 print("Total number of individuals: " + str(len(inds)))
-
 total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)
 if not args.useK:
+    if not args.hapibd:
+        print("Need to provide HapIBD output in order to perform ERSA-like approach inference")
+        sys.exit()
     if args.FDR:
         ersa_FDR(all_rel, hapibd_segs, hapibd_isCensored, args.minIBD, args.alpha)
     else:
@@ -107,7 +115,7 @@ outfile_results = open(args.o[0]+'.DRUID','w')
 outfile_results.write("#ind1\tind2\tDRUID\tRefinedIBD\tMethod\n")
 
 print("\n\nRunning main DRUID inference")
-runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile_results)
+runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile_results, snp_map, args.accu)
 
 outfile_results.close()
 

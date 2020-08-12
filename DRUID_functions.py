@@ -8,6 +8,7 @@ from collections import defaultdict
 from scipy.integrate import quad
 from scipy.special import logsumexp
 from concurrent import futures
+from numba import jit
 import scipy.stats
 from collections import namedtuple
 from operator import attrgetter
@@ -186,11 +187,29 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
     hapibd_isCensored = {}
     pairs = {}
 
+    global inds
+    inds = set()
+    if inds_file != '':
+        file = open(inds_file,'r')
+        for line in file:
+            l = str.split(line.rstrip())
+            if len(l):
+                inds.add(l[0])
+        file.close()
+
     start = time.time()
     with gzip.open(file_for_hapibd, 'rt') as file:
         line = file.readline()
         while line:
             ind1, _, ind2, _, chr, start_bp, end_bp, length = line.strip().split('\t')
+
+            if inds_file != "" and (ind1 not in inds or ind2 not in inds):
+                line = file.readline()
+                continue
+            elif inds_file == "":
+                inds.add(ind1)
+                inds.add(ind2)
+            
             ids = (min(ind1, ind2), max(ind1, ind2))
             start_bp, end_bp, length = int(start_bp), int(end_bp), float(length)
 
@@ -215,62 +234,47 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
 
             line = file.readline()
     print(f'finished reading hapibd file, takes {time.time()-start}', flush=True)
-    global inds
+
     first = [] #list of first degree relative pairs according to Refined IBD results
     second = [] #list of second degree relative pairs according to Refined IBD results
     third = [] #list of third degree relative pairs according to Refined IBD results
-    inds = set()
-    if inds_file != '':
-        file = open(inds_file,'r')
-        for line in file:
-            l = str.split(line.rstrip())
-            if len(l):
-                inds.add(l[0])
-        file.close()
 
     all_segs = {}
     all_rel = defaultdict(lambda: {})
     for pair, pair_obj in pairs.items():
         ind1, ind2 = pair
-        if inds_file == '':
-            inds.add(ind1)
-            inds.add(ind2)
-
-        if ind1 in inds and ind2 in inds:
-            if not ind1 in all_segs:
-                all_segs[ ind1 ] = \
+        if not ind1 in all_segs:
+            all_segs[ ind1 ] = \
                     { ind2: [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ] }
-            elif not ind2 in all_segs[ ind1 ]:
-                all_segs[ ind1 ][ ind2 ] = \
-                            [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
+        elif not ind2 in all_segs[ ind1 ]:
+            all_segs[ ind1 ][ ind2 ] = \
+                        [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
 
-            ibd1 = ibd2 = 0
-            for chrom_name, interval_Tree in pair_obj.ibdList.items():
-                chr = chrom_name_to_idx[chrom_name]
-                for interval in interval_Tree.items():    
-                    ibdSeg = interval[2]
-                    IBD_status = 1 if ibdSeg.isIBD2 else 0
-                    start_cM, end_cM = ibdSeg.start_cM, ibdSeg.end_cM
-                    all_segs[ind1][ind2][IBD_status][chr].append([start_cM, end_cM])
-                    if IBD_status:
-                        ibd2 += ibdSeg.length
-                    else:
-                        ibd1 += ibdSeg.length
+        ibd1 = ibd2 = 0
+        for chrom_name, interval_Tree in pair_obj.ibdList.items():
+            chr = chrom_name_to_idx[chrom_name]
+            for interval in interval_Tree.items():    
+                ibdSeg = interval[2]
+                IBD_status = 1 if ibdSeg.isIBD2 else 0
+                start_cM, end_cM = ibdSeg.start_cM, ibdSeg.end_cM
+                all_segs[ind1][ind2][IBD_status][chr].append([start_cM, end_cM])
+                if IBD_status:
+                    ibd2 += ibdSeg.length
+                else:
+                    ibd1 += ibdSeg.length
 
-            ibd1 /= total_genome
-            ibd2 /= total_genome
-            ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome)
-            K = ibd1/4.0 + ibd2/2.0
-            degree = getInferredFromK(K)
-            all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
-            if degree == 1:
-                first.append([ind1,ind2])
-            elif degree == 2:
-                second.append([ind1,ind2])
-            elif degree == 3:
-                third.append([ind1, ind2])
-        else:
-            continue
+        ibd1 /= total_genome
+        ibd2 /= total_genome
+        ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome)
+        K = ibd1/4.0 + ibd2/2.0
+        degree = getInferredFromK(K)
+        all_rel[ind1][ind2] = [ibd1,ibd2, K, degree]
+        if degree == 1:
+            first.append([ind1,ind2])
+        elif degree == 2:
+            second.append([ind1,ind2])
+        elif degree == 3:
+            third.append([ind1, ind2])
 
 
     return hapibd_segs, hapibd_isCensored, all_segs, all_rel, inds, first, second, third
@@ -797,7 +801,7 @@ def findOverlap(sibseg, avsib, ss1, sa1, sa2, Eval):
 
 
 
-def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
+def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs, sorted_snp_pos, accu):
     #get total IBD length between two sets of relatives (sib1+avunc1 and sib2+avunc2)
     #return length and number of individuals in each set with IBD segments
     sibandav = sib1.copy()
@@ -836,6 +840,10 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
                     all_seg_IBD1[chr] += tmp[0][chr]
                     all_seg_IBD2[chr] += tmp[1][chr]
 
+
+    sib1_len, sib2_len, av1_len, av2_len = sum(has_seg_sib1), sum(has_seg_sib2), \
+                                            sum(has_seg_avunc1), sum(has_seg_avunc2)
+
     IBD_sum = 0
     for chr in range(num_chrs):
         all_seg_IBD1[chr] = mergeIntervals(all_seg_IBD1[chr][:])
@@ -843,19 +851,84 @@ def getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs):
             IBD_sum += seg[1] - seg[0]
         all_seg_IBD2[chr] = mergeIntervals(all_seg_IBD2[chr][:])
         for seg in all_seg_IBD2[chr]:
-            IBD_sum += 2*(seg[1] - seg[0])
+            IBD_sum += 2.0*(seg[1] - seg[0])
 
+
+    prop_sib1 = 1 - 0.5**sib1_len
+    prop_sib2 = 1 - 0.5**sib2_len
+    prop_av1 = 1 - 0.5**av1_len
+    prop_av2 = 1 - 0.5**av2_len
+
+    if accu:
+        if sib1_len > 1:
+            prop_sib1 = calcTransmissionPropandMerge_sib(sib1, all_segs, sorted_snp_pos)
+            #print(f'number of sibs: {len(sib1)}, transmitted prop is {prop_sib1}')
+        if sib2_len > 1:
+            prop_sib2 = calcTransmissionPropandMerge_sib(sib2, all_segs, sorted_snp_pos)
+            #print(f'number of sibs: {len(sib2)}, transmitted prop is {prop_sib2}')
+        if av1_len > 1:
+            prop_av1 = calcTransmissionPropandMerge_sib(avunc1, all_segs, sorted_snp_pos)
+            #print(f'number of sibs: {len(avunc1)}, transmitted prop is {prop_av1}')
+        if av2_len > 1:
+            prop_av2 = calcTransmissionPropandMerge_sib(avunc2, all_segs, sorted_snp_pos)
+            #print(f'number of sibs: {len(avunc2)}, transmitted prop is {prop_av2}')
+
+    return IBD_sum, prop_sib1, prop_sib2, prop_av1, prop_av2, sib1_len, sib2_len, av1_len, av2_len
+
+def calcTransmissionPropandMerge_sib(sibs, all_segs, sorted_snp_pos):
+    both_copy = one_copy = 0
+    all_seg_IBD1 = { chr : [] for chr in range(num_chrs) }
+    all_seg_IBD2 = { chr : [] for chr in range(num_chrs) }
+    for ind1, ind2 in itertools.combinations(sibs, 2):
+        tmp = getIBDsegments(ind1, ind2, all_segs)
+        for chr in range(num_chrs):
+            all_seg_IBD1[chr] += tmp[0][chr]
+            all_seg_IBD2[chr] += tmp[1][chr]
+    for chr in range(num_chrs):
+        one_copy_chr, both_copy_chr = \
+                transmission_sib_per_chr(all_seg_IBD1[chr], all_seg_IBD2[chr], sorted_snp_pos[chr], len(sibs))
+        both_copy += both_copy_chr
+        one_copy += one_copy_chr
+    return both_copy/total_genome + 0.5*one_copy/total_genome + 0.75*(total_genome - both_copy - one_copy)/total_genome
+
+def transmission_sib_per_chr(IBD1segs_chr, IBD2segs_chr, sorted_snp_pos_chr, num_sibs):
+    indicator1 = np.zeros(len(sorted_snp_pos_chr))
+    indicator2 = np.zeros(len(sorted_snp_pos_chr))
+    for seg in IBD1segs_chr:
+        start_idx = np.searchsorted(sorted_snp_pos_chr, seg[0])
+        end_idx = np.searchsorted(sorted_snp_pos_chr, seg[1])
+        indicator1[start_idx:end_idx+1] += 1
+    
+    for seg in IBD2segs_chr:
+        start_idx = np.searchsorted(sorted_snp_pos_chr, seg[0])
+        end_idx = np.searchsorted(sorted_snp_pos_chr, seg[1])
+        indicator2[start_idx:end_idx+1] += 1
+    
+    #calculate IBD1sum and IBD2sum
+    bool_array1 = (indicator1 != 0).astype(np.int32)
+    bool_array2 = (indicator2 != 0).astype(np.int32)
+    seg_array1 = bool_array1*sorted_snp_pos_chr
+    seg_array2 = bool_array2*sorted_snp_pos_chr
     # All siblings IBD2 -> only half of the parental genome transmitted
     # at least two sibs IBD0 -> all of the parental genome transmitted
     # the rest? not sure, use 0.75 as an approximation
 
-    return [IBD_sum, sum(has_seg_sib1), sum(has_seg_sib2), sum(has_seg_avunc1), sum(has_seg_avunc2)]
+    #calculate regions where only half the parental genome is transmitted
+    sum_single_copy = sumup((indicator2 == num_sibs*(num_sibs-1)/2)*sorted_snp_pos_chr) 
+    indicator3 = indicator2 + indicator1
+    sum_both_copies = sumup((indicator3 < num_sibs*(num_sibs-1)/2)*sorted_snp_pos_chr)
+    #print(f'single copy interval: {interval1}')
+    #print(f'both copies interval: {interval2}')
+    return sum_single_copy, sum_both_copies
 
-#def mergeIntervals2(IBD1segs, IBD2segs, snp_map_chr):
-#    pos = sorted(snp_map_chr.values())
-#    indicators = 
-
-
+@jit(parallel=True, nopython=True)
+def sumup(seg_array):
+    sum = 0
+    head = seg_array[0] if seg_array[0] > 0 else -1
+    for i in np.arange(1, len(seg_array)):
+        if seg_array[i] != 0 and seg_array[i-1] != 0:
+            sum += seg_array[i] - seg_array[i-1]
+    return sum
 
 def getInferredWithRel(total_IBD, pct_par, pct_par_rel):
     # using total length of IBD (in cM) and expected percentage of parent genome present in sibling set or percentage of grandparent genome present in sib + aunt/uncle set, calculate estimated K
@@ -877,7 +950,8 @@ def getExpectedPar(num_sibs):
     return (1.0-1.0/2.0**num_sibs)
 
 
-def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2, pc2, all_rel, all_segs, rel_graph):
+def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2, pc2, all_rel, \
+                all_segs, rel_graph, sorted_snp_pos, accu):
 # perform ancestral genome reconstruction between two groups of related individuals (sib1+avunc1 and sib2+avunc2)
 # infers relatedness between all individuals within the two groups
     # TODO! use any neice/nephews of sib1, sib2 as well
@@ -893,56 +967,51 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
 
     # returns total length of genome IBD between sibandav and sibandav_rel, number of sibs in sib1 with IBD segments, 
     # number of sibs in sib2 with IBD segments
-    [tmpsibav, sib1_len, sib2_len, av1_len, av2_len] = \
-        getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs)
+    tmpsibav, prop_sib1, prop_sib2, prop_av1, prop_av2, sib1_len, sib2_len, av1_len, av2_len = \
+        getSiblingRelativeFamIBDLengthIBD2(sib1, sib2, avunc1, avunc2, all_segs, sorted_snp_pos, accu)
 
     #MY MODIFICATION STARTS HERE
-    tmp = tmpsibav
 
     if sib2_len + av2_len == 1:
-        adj = 2*mean_ibd_amount*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
-            +mean_ibd_amount*(1-0.5**sib1_len)
+        adj = 2*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1) \
+            + mean_ibd_amount*prop_sib1
     elif sib1_len + av1_len == 1:
-        adj = 2*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
-            +mean_ibd_amount*(1-0.5**sib2_len)
+        adj = 2*mean_ibd_amount*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2) \
+            +mean_ibd_amount*prop_sib2
     else:
-        adj = 4*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len)) \
-        *(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len)) \
-            + 2*mean_ibd_amount*(1 - 0.5**av2_len + (0.5**(av2_len+1))*(1-0.5**sib2_len))*(1 - 0.5**sib1_len) \
-            + 2*mean_ibd_amount*(1 - 0.5**av1_len + (0.5**(av1_len+1))*(1-0.5**sib1_len))*(1 - 0.5**sib2_len) \
-            + mean_ibd_amount*(1 - 0.5**sib1_len)*(1 - 0.5**sib2_len)
+        adj = 4*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1) \
+        *(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2) \
+            + 2*mean_ibd_amount*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2)*prop_sib1 \
+            + 2*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1)*prop_sib2 \
+            + mean_ibd_amount*prop_sib1*prop_sib2
 
    
     tmpsibav = max(0, tmpsibav-adj)
-
-    #if tmpsibav > 0:
-    #    print(f'{sib1}, {avunc1}')
-    #    print(f'{sib2},{avunc2}')
-
-    #print(f'num_R1\t{sib1_len+av1_len}\tnum_R2\t{sib2_len+av2_len}')
-    #print(f'total IBD before correction: {tmp}')
-    #print(f'total IBD after correction: {tmpsibav}')
     #MY MODIFICATION ENDS HERE
 
-
     #get proportion of ancestor genome information expected on side 1
+
     if av1_len != 0:
-        proportion_gp_exp = getExpectedGP(len(sib1),len(avunc1))
+        #proportion_gp_exp = getExpectedGP(len(sib1),len(avunc1))
+        proportion_gp_exp = prop_av1 + 0.5*(1-prop_av1)*prop_sib1
         proportion_par_exp = 0
     elif sib1_len > 1:
         proportion_gp_exp = 0
-        proportion_par_exp = getExpectedPar(len(sib1))
+        #proportion_par_exp = getExpectedPar(len(sib1))
+        proportion_par_exp = prop_sib1
     else:
         proportion_par_exp = 0
         proportion_gp_exp = 0
 
     #get proportion of ancestor genome information expectedo n side2
     if av2_len != 0:
-        proportion_gp_rel_exp = getExpectedGP(len(sib2), len(avunc2))
+        #proportion_gp_rel_exp = getExpectedGP(len(sib2), len(avunc2))
+        proportion_gp_rel_exp = prop_av2 + 0.5*(1-prop_av2)*prop_sib2
         proportion_par_rel_exp = 0
     elif sib2_len > 1:
         proportion_gp_rel_exp = 0
-        proportion_par_rel_exp = getExpectedPar(len(sib2))
+        #proportion_par_rel_exp = getExpectedPar(len(sib2))
+        proportion_par_rel_exp = prop_sib2
 
     else:
         proportion_par_rel_exp = 0
@@ -1558,9 +1627,10 @@ def printResult(res, outfile):
     elif res[2] in ['-1',-1]:
         res[2] = 'UN'
         res[3] = 'UN'
+    res[0], res[1] = min(res[0], res[1]), max(res[0], res[1])
     outfile.write("\t".join(map(str,res))+'\n')
 
-def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile):
+def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile, snp_map, accu):
     checked = set()
     for [ind1,ind2] in itertools.combinations(inds,2): #test each pair of individuals
         pair_name = getPairName(ind1, ind2)
@@ -1696,7 +1766,12 @@ def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile):
                 graphCase = True
             else:
                 # DO THE INFERENCE
-                results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, pc2, all_rel, all_segs, rel_graph)
+                sorted_snp_pos = {}
+                for chr_name in snp_map.keys():
+                    pos = snp_map[chr_name].values()
+                    sorted_snp_pos[chrom_name_to_idx[chr_name]] = list(sorted(pos))
+                results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, \
+                                            pc2, all_rel, all_segs, rel_graph, sorted_snp_pos, accu)
                 for resu in results_tmp:
                     this_pair = getPairName(resu[0], resu[1])
                     if not this_pair in checked:
