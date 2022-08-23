@@ -1308,6 +1308,47 @@ def alter_likelihood(ibd_list, ibd_isCensored, C):
     a, d, n_p = dim1[0], dim2[0], dim3[0]
     return results[a, d, n_p], d, a, n_p
 
+# this theory version has lower accuracy for fifth degree for reasons I don't know (look into this later)
+# but except for the 5th degree, it has essentailly the same accuracy as alter_likelihood
+# note that in alter_likelihood, the mean number of segments from ancestry is obtained by simulation
+# in this alter_likelihood_t, that number is calculated by a simple IBD coalescent model
+def alter_likelihood_t(ibd_list, ibd_isCensored, C):
+    d = 4
+    D = 10 #any relationship more distant than 10 will be considered "unrelated"
+    num_ibd = len(ibd_list)
+    theta = mean_ibd_amount / mean_seg_num - C 
+    results = np.full((3, D+1, num_ibd+1), -np.inf)
+
+    n_p = np.arange(0, num_ibd+1)
+    log_pois_part_pop = scipy.stats.poisson.logpmf(n_p, mean_seg_num)
+    log_censored = (-(ibd_list - C)/theta)*(ibd_isCensored)
+    log_unCensored = (-(ibd_list - C)/theta - np.log(theta))*(~ibd_isCensored)
+    log_exp_part_pop = np.insert(np.cumsum(log_censored) + np.cumsum(log_unCensored), 0, 0)
+    log_pop = log_pois_part_pop + log_exp_part_pop
+    
+    ibd_list_reversed = ibd_list[::-1]
+    ibd_isCensored_reversed = ibd_isCensored[::-1]
+
+    for a in range(1,3):
+        deg = np.arange(d, D+1)
+        num_meiosis = deg if a == 1 else deg + 1
+        num_meiosis = num_meiosis[:,np.newaxis]
+        log_pois_part_ancestry = np.zeros((len(deg), num_ibd+1))
+        for i in range(d, D+1):
+            mean_num_seg_ancestry = (4*total_genome/(2**(i+1)))/(100/num_meiosis[i-d])
+            log_pois_part_ancestry[i-d,:] = scipy.stats.poisson.logpmf(num_ibd - n_p, \
+                mean_num_seg_ancestry*np.exp(-C*num_meiosis[i-d]/100))
+        
+        log_ancestry_unCensored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100 - np.log(100/num_meiosis))*(~ibd_isCensored_reversed)
+        log_ancestry_censored = (num_meiosis*(C - np.tile(ibd_list_reversed, (len(deg), 1)))/100)*ibd_isCensored_reversed
+        log_exp_part_ancestry = np.append(np.flip(np.apply_along_axis(np.cumsum, 1, log_ancestry_unCensored)+np.apply_along_axis(np.cumsum, 1, log_ancestry_censored),axis=1), np.zeros((len(deg), 1)),axis=1)
+        log_ancestry = log_pois_part_ancestry + log_exp_part_ancestry
+        results[a, d:D+1, :] = log_ancestry + log_pop
+
+    dim1, dim2, dim3 = np.where(results == np.max(results))
+    a, d, n_p = dim1[0], dim2[0], dim3[0]
+    return results[a, d, n_p], d, a, n_p
+
 
 #def alter_likelihood(ibd_list, ibd_isCensored, C):
 #    D = 10 #any relationship more distant than 10 will be considered "unrelated"
@@ -1414,7 +1455,7 @@ def LRT(ibd_list, ibd_isCensored, C):
     ibd_list, ibd_isCensored = zip(*tmp)
     ibd_list, ibd_isCensored = np.array(ibd_list), np.array(ibd_isCensored)                
     null_lik = null_likelihood(ibd_list, ibd_isCensored, C)
-    alter_lik, d, a, n_p = alter_likelihood(ibd_list, ibd_isCensored, C)
+    alter_lik, d, a, n_p = alter_likelihood_t(ibd_list, ibd_isCensored, C)
     chi2 = -2*(null_lik - alter_lik)
     p_value = 1 - scipy.stats.chi2.cdf(chi2, df=2)
     return (p_value, d)

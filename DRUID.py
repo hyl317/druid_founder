@@ -21,6 +21,8 @@ parser=argparse.ArgumentParser(
      With flag -F, can also output PLINK format .fam files containing first and second degree relationships types which were inferred/provided, outputting multiple .fam files in cases when a parent-child pair is found, but there is not
      enough information to determine who is the parent and who is the child""")
 parser.add_argument('-o', type=str, nargs=1, default=['out'], help='Output file prefix', metavar='out')
+#in principle, the -i and -s argument is no longer required as my readHapIBD2 function can calculate these two things
+#however, readHapIBD2 function is quite slow, so we might not wanna use that
 parser.add_argument('-i', type=str, nargs=1, required=True, help='Pairwise IBD1 & IBD2 proportions file', metavar='file.ibd12')
 parser.add_argument('-s', type=str, nargs=1, required=True, help='Pairwise IBD segments file', metavar='file.seg')
 parser.add_argument('-m', type=str, nargs=1, required=True, help='Map file (PLINK format), non-zero cM column required', metavar='file.map')
@@ -28,11 +30,11 @@ parser.add_argument('-f', type=str, nargs=1, default=[''], help="Known first (FS
 parser.add_argument('-u', type=str, nargs=1, default=[''], help='File containing individuals to include', metavar='file.inds')
 parser.add_argument('-C', type=int, nargs=1, default=[0], help='Whether to run DRUID in normal mode (0) or conservative mode (1); default is 0', metavar='0/1')
 parser.add_argument('-F', type=int, nargs=1, default=[0], help='Whether to output fam files (PLINK format) containing inferred/provided relationship types; default is 0', metavar='0/1')
-parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 200 generations.", metavar="Ne trajectory")
+parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 100-200 generations.", metavar="Ne trajectory")
 parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="minimum length(in centiMorgan) of IBD detected")
-parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file. gzipped')
+parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file, gzipped')
 parser.add_argument('--FDR', action='store_true')
-parser.add_argument('--useK', action="store_true")
+parser.add_argument('--useERSA', action="store_false")
 parser.add_argument('--accu', action="store_true")
 parser.add_argument('--alpha', action="store", type=float, default=0.05, help="alpha for bonferroni correction or false discovery rate for FDR. Default to 0.05.")
 args=parser.parse_args()
@@ -58,7 +60,7 @@ else:
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs
 [total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs, snp_map] = getChrInfo(args.m[0])
 print("Genome length: " + str(total_genome)+'\n')
-
+print(f'chrom length: {np.array(chrom_ends)-np.array(chrom_starts)}')
 global founder, mean_seg_num, mean_ibd_amount
 founder = args.N != None
 if founder:
@@ -84,7 +86,7 @@ else:
     [all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
 
 print("Total number of individuals: " + str(len(inds)))
-total_num_comparison = len(inds)*(len(inds)-1)/2 - len(first) - len(second) - len(third)
+
 if not args.useK:
     if not args.hapibd:
         print("Need to provide HapIBD output in order to perform ERSA-like approach inference")
