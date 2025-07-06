@@ -16,9 +16,13 @@ from DRUID_graph_interaction import *
 from DRUID_all_rel import *
 from constant import *
 import ibd
+import pandas as pd
+from collections import Counter
+from itertools import product
+
 
 global total_genome, chrom_name_to_idx, chrom_idx_to_name, num_chrs, mean_seg_num, mean_ibd_amount
-
+MAX_ITER = 5
 degrees = {'MZ': 1/2.0**(3.0/2), 1: 1/2.0**(5.0/2), 2: 1/2.0**(7.0/2), 3: 1/2.0**(9.0/2), 4: 1/2.0**(11.0/2), 5: 1/2.0**(13.0/2), 6: 1/2.0**(15.0/2), 7: 1/2.0**(17.0/2), 8: 1/2.0**(19.0/2), 9: 1/2.0**(21.0/2), 10: 1/2.0**(23.0/2), 11: 1/2.0**(25.0/2), 12: 1/2.0**(27/2.0), 13: 1/2.0**(29.0/2)}  # threshold values for each degree of relatedness
 
 
@@ -283,14 +287,12 @@ def readHapIBD2(file_for_hapibd, snp_map, chrom_names, inds_file):
 
 def readSegments(file_for_segments):
     all_segs = {}
-
-    IBD_file = open(file_for_segments, 'r')
-    for line in IBD_file:
-        l = str.split(line.rstrip())
-        if l[0] < l[1]:
-            ids = [ l[0], l[1] ]
+    df_ibd = pd.read_csv(file_for_segments, sep=r"\s+")
+    for index, row in df_ibd.iterrows():
+        if row['iid1'] < row['iid2']:
+            ids = [ row['iid1'], row['iid2'] ]
         else:
-            ids = [ l[1], l[0] ]
+            ids = [ row['iid2'], row['iid1'] ]
 
         if not ids[0] in all_segs:
             all_segs[ ids[0] ] = \
@@ -298,14 +300,38 @@ def readSegments(file_for_segments):
         elif not ids[1] in all_segs[ ids[0] ]:
             all_segs[ ids[0] ][ ids[1] ] = \
                                 [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
-        chrom_name = l[2]
+        chrom_name = str(row['ch'])
         chr = chrom_name_to_idx[chrom_name]
-        ibd_type = int(l[3][3]) # chop "IBD" off, get integer type IBD_1_ or 2
-        all_segs[ ids[0] ][ ids[1] ][ibd_type - 1][chr].append([float(l[4]), float(l[5])])
-
-    IBD_file.close()
+        ibd_type = int(row['ibd_type'][-1])
+        all_segs[ ids[0] ][ ids[1] ][ibd_type - 1][chr].append([float(row['startCM']), float(row['endCM'])])
 
     return all_segs
+
+# def readSegments(file_for_segments):
+#     all_segs = {}
+
+#     IBD_file = open(file_for_segments, 'r')
+#     for line in IBD_file:
+#         l = str.split(line.rstrip())
+#         if l[0] < l[1]:
+#             ids = [ l[0], l[1] ]
+#         else:
+#             ids = [ l[1], l[0] ]
+
+#         if not ids[0] in all_segs:
+#             all_segs[ ids[0] ] = \
+#                     { ids[1]: [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ] }
+#         elif not ids[1] in all_segs[ ids[0] ]:
+#             all_segs[ ids[0] ][ ids[1] ] = \
+#                                 [ { chr : [] for chr in range(num_chrs) } for _ in range(2) ]
+#         chrom_name = l[2]
+#         chr = chrom_name_to_idx[chrom_name]
+#         ibd_type = int(l[3][3]) # chop "IBD" off, get integer type IBD_1_ or 2
+#         all_segs[ ids[0] ][ ids[1] ][ibd_type - 1][chr].append([float(l[4]), float(l[5])])
+
+#     IBD_file.close()
+
+#     return all_segs
 
 
 def inferSecondPath(rel_graph, rel_graph_tmp, all_rel, second, all_segs, outfile, C):
@@ -418,37 +444,44 @@ def getChrInfo(mapfile):
     num_chrs = 0
     snp_map = defaultdict(lambda : {})
 
-    file = open(mapfile,'r')
-    for line in file:
-        l = str.split(line.rstrip())
-        chr_name = l[0]
-        if not chr_name in chrom_name_to_idx.keys():
-            chrom_name_to_idx[chr_name] = chr = num_chrs
-            chrom_idx_to_name.append(chr_name)
-            num_chrs += 1
-            chrom_starts.append(99999999)
-            chrom_ends.append(0)
-            chrom_starts_bp.append(99999999)
-            chrom_ends_bp.append(0)
-        else:
-            chr = chrom_name_to_idx[chr_name]
+    with open(mapfile, 'r') as file:
+        for line in file:
+            chr_name, _, pos, bp, *_ = line.strip().split()
+            pos, bp = float(pos), int(bp)
+            if not chr_name in chrom_name_to_idx.keys():
+                chrom_name_to_idx[chr_name] = chr = num_chrs
+                chrom_idx_to_name.append(chr_name)
+                num_chrs += 1
+                chrom_starts.append(99999999)
+                chrom_ends.append(0)
+                chrom_starts_bp.append(99999999)
+                chrom_ends_bp.append(0)
+            else:
+                chr = chrom_name_to_idx[chr_name]
 
-        pos = float(l[2])
-        bp = int(l[3])
-        snp_map[chr_name][bp] = pos
+            snp_map[chr_name][bp] = pos
 
-        if chrom_starts[chr] > pos:
-            chrom_starts[chr] = pos
-            chrom_starts_bp[chr] = bp
-        if chrom_ends[chr] < pos:
-            chrom_ends[chr] = pos
-            chrom_ends_bp[chr] = bp
+            if chrom_starts[chr] > pos:
+                chrom_starts[chr] = pos
+                chrom_starts_bp[chr] = bp
+            if chrom_ends[chr] < pos:
+                chrom_ends[chr] = pos
+                chrom_ends_bp[chr] = bp
 
-    file.close()
 
     total_genome = 0
     for chr in range(num_chrs):
         total_genome += chrom_ends[chr] - chrom_starts[chr]
+    if total_genome < 40:
+        print('Chromosome map shorter than 40 units of genetic distance.')
+        print('\tMorgan input detected - Converting to centimorgans. (Prevent this by running with -noConvert argument)')
+        total_genome *= 100
+        for chr in range(num_chrs):
+            chrom_starts[chr] *= 100
+            chrom_ends[chr] *= 100
+        for chr_name in snp_map.keys():
+            for bp in snp_map[chr_name].keys():
+                snp_map[chr_name][bp] *= 100
 
     return [total_genome, chrom_name_to_idx, chrom_idx_to_name, chrom_starts, chrom_ends, num_chrs, snp_map]
 
@@ -951,7 +984,7 @@ def getExpectedPar(num_sibs):
 
 
 def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2, pc2, all_rel, \
-                all_segs, rel_graph, sorted_snp_pos, accu):
+                all_segs, rel_graph, sorted_snp_pos, accu, mean_ibd_amount):
 # perform ancestral genome reconstruction between two groups of related individuals (sib1+avunc1 and sib2+avunc2)
 # infers relatedness between all individuals within the two groups
     # TODO! use any neice/nephews of sib1, sib2 as well
@@ -973,19 +1006,70 @@ def combineBothGPsKeepProportionOnlyExpectation(sib1, avunc1, pc1, sib2, avunc2,
     #MY MODIFICATION STARTS HERE
 
     if sib2_len + av2_len == 1:
-        adj = 2*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1) \
+        if av1_len == 0: # One distant relative against a bunch of FS
+            currD = [getPairwiseD(sib1_, next(iter(sib2)), all_rel) for sib1_ in sib1]
+        else: # one distant relative against FS + AV
+            currD = [getPairwiseD(avunc1_, next(iter(sib2)), all_rel) for avunc1_ in avunc1]
+        d = Counter(currD).most_common(1)[0][0]
+        d = d - 1 if d != -1 else None # when it's unrelated, set d to None to distinguish it
+        factor = (2-0.5**(d-1)) if d else 2
+        adj = mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1)*factor \
             + mean_ibd_amount*prop_sib1
     elif sib1_len + av1_len == 1:
-        adj = 2*mean_ibd_amount*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2) \
+        if av2_len == 0: # One distant relative against a bunch of FS
+            currD = [getPairwiseD(next(iter(sib1)), sib2_, all_rel) for sib2_ in sib2]
+        else: # one distant relative against FS + AV
+            currD = [getPairwiseD(next(iter(sib1)), avunc2_, all_rel) for avunc2_ in avunc2]
+        d = Counter(currD).most_common(1)[0][0]
+        d = d - 1 if d != -1 else None
+        factor = (2-0.5**(d-1)) if d else 2
+        adj = mean_ibd_amount*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2)*factor \
             +mean_ibd_amount*prop_sib2
     else:
-        adj = 4*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1) \
-        *(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2) \
+        d_avav, d_avsib2, d_avsib1, d_sibsib = None, None, None, None
+        # avunc1 × avunc2
+        if avunc1 and avunc2:
+            currD_avav = [getPairwiseD(a1, a2, all_rel) for a1 in avunc1 for a2 in avunc2]
+            d_avav = Counter(currD_avav).most_common(1)[0][0]
+
+        # avunc1 × sib2
+        if avunc1 and sib2:
+            currD_avsib2 = [getPairwiseD(a1, s2, all_rel) for a1 in avunc1 for s2 in sib2]
+            d_avsib2 = Counter(currD_avsib2).most_common(1)[0][0]
+
+        # avunc2 × sib1
+        if avunc2 and sib1:
+            currD_avsib1 = [getPairwiseD(a2, s1, all_rel) for a2 in avunc2 for s1 in sib1]
+            d_avsib1 = Counter(currD_avsib1).most_common(1)[0][0]
+
+        # sib1 × sib2
+        if sib1 and sib2:
+            currD_sibsib = [getPairwiseD(s1, s2, all_rel) for s1 in sib1 for s2 in sib2]
+            d_sibsib = Counter(currD_sibsib).most_common(1)[0][0]
+
+        # use avunc if possible, if not, use sibs
+        d = None
+        if d_avav and d_avav != -1:
+            d = d_avav - 2
+        elif d_avsib2 and d_avsib2 != -1:
+            d = d_avsib2 - 2
+        elif d_avsib1 and d_avsib1 != -1:
+            d = d_avsib1 - 2
+        elif d_sibsib and d_sibsib != -1:
+            d = d_sibsib - 2
+        factor = 1 - 0.5**(d-1) if d else 1.0
+
+        p1 = (prop_av1 + 0.5*(1 - prop_av1)*prop_sib1)*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2)
+        adj = 3*mean_ibd_amount*p1 + mean_ibd_amount*p1*factor \
             + 2*mean_ibd_amount*(prop_av2 + 0.5*(1 - prop_av2)*prop_sib2)*prop_sib1 \
             + 2*mean_ibd_amount*(prop_av1 + 0.5*(1 - prop_av1)*prop_sib1)*prop_sib2 \
             + mean_ibd_amount*prop_sib1*prop_sib2
-
-   
+    if d:
+        print(f'd={d}')
+        print(sib1)
+        print(avunc1)
+        print(sib2)
+        print(avunc2)
     tmpsibav = max(0, tmpsibav-adj)
     #MY MODIFICATION ENDS HERE
 
@@ -1384,7 +1468,7 @@ def alter_likelihood_t(ibd_list, ibd_isCensored, C):
 #    #print(results, flush=True)
 #    return results[d, a, n_p], d, a, n_p
 
-def getAllRel(results_file, inds_file):
+def getAllRel(results_file, inds_file, mean_ibd_amount, total_genome):
     # read in results file:
     # all_rel: dict of ind1, dict of ind2, list of [IBD1, IBD2, K, D]
     # store pairwise relatedness information
@@ -1394,24 +1478,21 @@ def getAllRel(results_file, inds_file):
     third = [] #list of third degree relative pairs according to Refined IBD results
     inds = set()
     if inds_file != '':
-        file = open(inds_file,'r')
-        for line in file:
-            l = str.split(line.rstrip())
-            if len(l):
-                inds.add(l[0])
-
-        file.close()
+        with open(inds_file,'r') as file:
+            for line in file:
+                l = str.split(line.rstrip())
+                if len(l):
+                    inds.add(l[0])
 
     all_rel = {}
-    file = open(results_file,'r')
-    for line in file:
-        l = str.split(line.rstrip())
+    df_ibd12 = pd.read_csv(results_file, sep=r'\s+')
+    for index, row in df_ibd12.iterrows():
         if inds_file == '':
-            inds.add(l[0])
-            inds.add(l[1])
-        if l[0] in inds and l[1] in inds:
-            ibd1 = float(l[2])
-            ibd2 = float(l[3])
+            inds.add(row['iid1'])
+            inds.add(row['iid2'])
+        if row['iid1'] in inds and row['iid2'] in inds:
+            ibd1 = row['IBD1_proportion']
+            ibd2 = row['IBD2_proportion']
 
             #MY MODIFICATION STARTS HERE
             ibd1 = max(0, ibd1 - mean_ibd_amount / total_genome) #Well, some of the mean_ibd_amount IBD will exhibit in the form of IBD2, need to think about this!
@@ -1419,12 +1500,7 @@ def getAllRel(results_file, inds_file):
             
             K = ibd1/4.0 + ibd2/2.0
             degree = getInferredFromK(K)
-            if l[0] < l[1]:
-                ind1 = l[0]
-                ind2 = l[1]
-            else:
-                ind1 = l[1]
-                ind2 = l[0]
+            ind1, ind2 = min(row['iid1'], row['iid2']), max(row['iid1'], row['iid2'])
             if not ind1 in all_rel.keys():
                 all_rel[ind1] = {} #IBD1, IBD2, K, D
 
@@ -1437,8 +1513,7 @@ def getAllRel(results_file, inds_file):
             elif degree == 3:
                 third.append([ind1, ind2])
 
-    file.close()
-    return [all_rel,inds,first,second,third]
+    return [all_rel, inds, first, second,third]
 
 def ersa_bonferroni(all_rel, hapibd_segs, hapibd_isCensored, C, alpha=0.05):
     results = ersa(all_rel, hapibd_segs, hapibd_isCensored, C)
@@ -1671,7 +1746,7 @@ def printResult(res, outfile):
     res[0], res[1] = min(res[0], res[1]), max(res[0], res[1])
     outfile.write("\t".join(map(str,res))+'\n')
 
-def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile, snp_map, accu):
+def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile, snp_map, accu, mean_ibd_amount):
     checked = set()
     for [ind1,ind2] in itertools.combinations(inds,2): #test each pair of individuals
         pair_name = getPairName(ind1, ind2)
@@ -1811,13 +1886,50 @@ def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile, snp_map, accu):
                 for chr_name in snp_map.keys():
                     pos = snp_map[chr_name].values()
                     sorted_snp_pos[chrom_name_to_idx[chr_name]] = list(sorted(pos))
-                results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, \
-                                            pc2, all_rel, all_segs, rel_graph, sorted_snp_pos, accu)
+                #### might want to call combineBothGPsKeepProportionOnlyExpectation iteratively to update mean_ibd_amount
+                # results_tmp = combineBothGPsKeepProportionOnlyExpectation(sib1, relavunc1, pc1, sib2, relavunc2, \
+                #                             pc2, all_rel, all_segs, rel_graph, sorted_snp_pos, accu, mean_ibd_amount)
+                # for resu in results_tmp:
+                #     this_pair = getPairName(resu[0], resu[1])
+                #     if not this_pair in checked:
+                #         resu.append('inferred3')
+                #         # TODO: twins inference
+                #         printResult(resu, outfile)
+                #         checked.add(this_pair)
+                prev_results = set()
+                converged = False
+                for it in range(MAX_ITER):
+                    results_tmp = combineBothGPsKeepProportionOnlyExpectation(
+                        sib1, relavunc1, pc1, sib2, relavunc2, pc2,
+                        all_rel, all_segs, rel_graph, sorted_snp_pos,
+                        accu, mean_ibd_amount
+                    )
+
+                    # Compare only (sib_rel, avunc, estimated_out_exp)
+                    curr_results = set((resu[0], resu[1], resu[2]) for resu in results_tmp)
+
+                    if curr_results == prev_results:
+                        print(f"Converged at iteration {it + 1}")
+                        converged = True
+                        break
+
+                    prev_results = curr_results
+                    for resu in results_tmp:
+                        ind1, ind2 = resu[0], resu[1]
+                        ind1, ind2 = min(ind1, ind2), max(ind1, ind2)
+                        ibd1, ibd2, K, D = getIBD1(ind1, ind2, all_rel), getIBD2(ind1, ind2, all_rel), getPairwiseK(ind1, ind2, all_rel), getPairwiseD(ind1, ind2, all_rel)
+                        if not ind1 in all_rel.keys():
+                            all_rel[ind1] = {} #IBD1, IBD2, K, D
+                        all_rel[ind1][ind2] = (ibd1, ibd2, K, resu[2])
+                        
+                    
+                if not converged:
+                    print("Reached maximum iterations without convergence.")
+                # Output each result only once
                 for resu in results_tmp:
                     this_pair = getPairName(resu[0], resu[1])
-                    if not this_pair in checked:
+                    if this_pair not in checked:
                         resu.append('inferred3')
-                        # TODO: twins inference
                         printResult(resu, outfile)
                         checked.add(this_pair)
 
@@ -2008,17 +2120,8 @@ def runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile, snp_map, accu):
 #MY MODIFICATION BELOW
 
 def readNe(NeFile):
-    N = []
-    with open(NeFile) as Ne:
-        line = Ne.readline()
-        while line:
-            if line.startswith('#'):
-                line = Ne.readline()
-                continue
-            g, ne = line.strip().split('\t')
-            N.append(float(ne))
-            line = Ne.readline()
-    return np.array(N)
+    df = pd.read_csv(NeFile)
+    return df['Ne'].values
 
 def expectation_num_segment(N, u):
     global mean_seg_num

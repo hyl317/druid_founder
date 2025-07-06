@@ -30,11 +30,11 @@ parser.add_argument('-f', type=str, nargs=1, default=[''], help="Known first (FS
 parser.add_argument('-u', type=str, nargs=1, default=[''], help='File containing individuals to include', metavar='file.inds')
 parser.add_argument('-C', type=int, nargs=1, default=[0], help='Whether to run DRUID in normal mode (0) or conservative mode (1); default is 0', metavar='0/1')
 parser.add_argument('-F', type=int, nargs=1, default=[0], help='Whether to output fam files (PLINK format) containing inferred/provided relationship types; default is 0', metavar='0/1')
-parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past 100-200 generations.", metavar="Ne trajectory")
+parser.add_argument('-N', type=str, dest='N', help="Effective Population Size trajectory. Recommended to provide Ne for the past ~100 generations.", metavar="Ne trajectory")
 parser.add_argument('--minIBD', type=float, dest='minIBD', default=2, help="minimum length(in centiMorgan) of IBD detected")
-parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file, gzipped')
+parser.add_argument('--hapibd', type=str, dest='hapibd', help='hapIBD output file, gzipped. Not needed if --useERSA is not set.')
 parser.add_argument('--FDR', action='store_true')
-parser.add_argument('--useERSA', action="store_false")
+parser.add_argument('--useERSA', action="store_true", dest="useERSA", help="use the ERSA method to infer the initial pairwise relatedness.")
 parser.add_argument('--accu', action="store_true")
 parser.add_argument('--alpha', action="store", type=float, default=0.05, help="alpha for bonferroni correction or false discovery rate for FDR. Default to 0.05.")
 args=parser.parse_args()
@@ -71,7 +71,10 @@ if founder:
     print('Correcting for founder effect')
     print(f'mean IBD segment number: {mean_seg_num}')
     print(f'mean total IBD sharing amount: {mean_ibd_amount}')
-    print(f'use Kinship coefficient? {args.useK}')
+    print(f'use Kinship coefficient? {not args.useERSA}')
+else:
+    mean_seg_num = 0
+    mean_ibd_amount = 0.0
 
 # Get IBD1/2 info: should be able to the following three functions all in one go
 hapibd_segs = None
@@ -83,11 +86,11 @@ else:
     assert args.i != None
     assert args.s != None
     all_segs = readSegments(args.s[0])
-    [all_rel, inds, first, second, third] = getAllRel(args.i[0], args.u[0])
+    all_rel, inds, first, second, third = getAllRel(args.i[0], args.u[0], mean_ibd_amount, total_genome)
 
 print("Total number of individuals: " + str(len(inds)))
 
-if not args.useK:
+if args.useERSA:
     if not args.hapibd:
         print("Need to provide HapIBD output in order to perform ERSA-like approach inference")
         sys.exit()
@@ -117,7 +120,7 @@ outfile_results = open(args.o[0]+'.DRUID','w')
 outfile_results.write("#ind1\tind2\tDRUID\tRefinedIBD\tMethod\n")
 
 print("\n\nRunning main DRUID inference")
-runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile_results, snp_map, args.accu)
+runDRUID(rel_graph, all_rel, inds, all_segs, args, outfile_results, snp_map, args.accu, mean_ibd_amount)
 
 outfile_results.close()
 
